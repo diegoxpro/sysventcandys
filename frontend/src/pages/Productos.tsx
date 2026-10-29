@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api, qs } from '../api';
 import { useAuth } from '../auth';
 import ProductoForm from '../components/ProductoForm';
-import { useCarga, useDebounce, Vacio } from '../components/ui';
-import { money, n, qty } from '../format';
+import { Kbd, useAtajos, useCarga, useDebounce, Vacio } from '../components/ui';
+import { monto, n, qty } from '../format';
 import { Producto } from '../types';
 
 const FILTROS = [
@@ -23,6 +23,11 @@ export default function Productos() {
   const [pagina, setPagina] = useState(1);
   const q = useDebounce(texto.trim(), 250);
   const [editar, setEditar] = useState<Producto | 'nuevo' | null>(null);
+  const buscar = useRef<HTMLInputElement>(null);
+  useAtajos({
+    F2: () => buscar.current?.select(),
+    ...(esAdmin && { F8: () => setEditar('nuevo') }),
+  });
 
   const { data, cargando, recargar } = useCarga(
     () => api<{ total: number; items: Producto[]; porPagina: number }>(`/productos${qs({ q, filtro, pagina, porPagina: 50 })}`),
@@ -37,24 +42,31 @@ export default function Productos() {
           <h1>Productos</h1>
           <p>{data ? `${data.total.toLocaleString('es-PE')} productos` : 'Cargando…'}</p>
         </div>
-        {esAdmin && <button className="btn btn-primary" onClick={() => setEditar('nuevo')}>Nuevo producto</button>}
+        {esAdmin && (
+          <button className="btn btn-primary" onClick={() => setEditar('nuevo')}>
+            Nuevo producto <Kbd>F8</Kbd>
+          </button>
+        )}
       </div>
 
       <div className="card">
-        <div className="card-head" style={{ flexWrap: 'wrap' }}>
-          <div className="search grow" style={{ minWidth: 260 }}>
+        <div className="card-head toolbar">
+          <div className="search grow">
             <input
+              ref={buscar}
+              aria-label="Buscar productos"
               value={texto}
               onChange={(e) => (setTexto(e.target.value), setPagina(1))}
               placeholder="Buscar por nombre o código de barras"
               autoFocus
             />
+            <Kbd>F2</Kbd>
           </div>
-          <div className="row" style={{ gap: 6 }}>
+          <div className="segmented" role="group" aria-label="Filtrar productos">
             {FILTROS.map((f) => (
               <button
                 key={f.id}
-                className={`btn btn-sm${filtro === f.id ? ' btn-primary' : ''}`}
+                aria-pressed={filtro === f.id}
                 onClick={() => (setParams(f.id ? { filtro: f.id } : {}), setPagina(1))}
               >
                 {f.label}
@@ -70,17 +82,23 @@ export default function Productos() {
                 <th>Producto</th>
                 <th>U.M.</th>
                 <th className="num">Stock</th>
-                <th className="num">Costo</th>
-                <th className="num">Precio 1</th>
-                <th className="num">Precio 2</th>
-                <th className="num">Precio 3</th>
+                <th className="num">Costo S/</th>
+                <th className="num">Precio 1 S/</th>
+                <th className="num">Precio 2 S/</th>
+                <th className="num">Precio 3 S/</th>
               </tr>
             </thead>
             <tbody>
               {data?.items.map((p) => {
                 const bajo = n(p.stockMinimo) > 0 && n(p.stock) <= n(p.stockMinimo);
                 return (
-                  <tr key={p.id} className="clickable" onClick={() => setEditar(p)}>
+                  <tr
+                    key={p.id}
+                    className="clickable"
+                    tabIndex={0}
+                    onClick={() => setEditar(p)}
+                    onKeyDown={(e) => e.key === 'Enter' && setEditar(p)}
+                  >
                     <td className="mono muted">{p.codigoBarra ?? '—'}</td>
                     <td>
                       {p.nombre}
@@ -96,10 +114,11 @@ export default function Productos() {
                       {/* Rojo o ámbar solo si el producto tiene mínimo definido; si no, un cero gris. */}
                       <span className={bajo ? (n(p.stock) <= 0 ? 'badge danger' : 'badge warn') : n(p.stock) <= 0 ? 'muted' : ''}>{qty(p.stock)}</span>
                     </td>
-                    <td className="num muted">{n(p.costo) > 0 ? money(p.costo) : '—'}</td>
-                    <td className="num"><b>{money(p.precio1)}</b></td>
-                    <td className="num">{money(p.precio2)}</td>
-                    <td className="num">{money(p.precio3)}</td>
+                    <td className="num muted">{n(p.costo) > 0 ? monto(p.costo) : '—'}</td>
+                    <td className="num"><b>{monto(p.precio1)}</b></td>
+                    {/* Precio 2 y 3 se apagan cuando repiten el precio 1: así resalta el que sí cambia. */}
+                    <td className={`num${n(p.precio2) === n(p.precio1) ? ' faint' : ''}`}>{monto(p.precio2)}</td>
+                    <td className={`num${n(p.precio3) === n(p.precio1) ? ' faint' : ''}`}>{monto(p.precio3)}</td>
                   </tr>
                 );
               })}
@@ -109,7 +128,7 @@ export default function Productos() {
         </div>
         <div className="pager">
           <span>Página {pagina} de {paginas}</span>
-          <div className="row" style={{ gap: 6 }}>
+          <div className="row tight">
             <button className="btn btn-sm" disabled={pagina <= 1} onClick={() => setPagina((p) => p - 1)}>Anterior</button>
             <button className="btn btn-sm" disabled={pagina >= paginas} onClick={() => setPagina((p) => p + 1)}>Siguiente</button>
           </div>

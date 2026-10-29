@@ -36,22 +36,10 @@ export default function Inicio() {
       </div>
 
       <div className="grid-4">
-        <div className={`card stat${a?.vencidos.length ? ' danger' : ''}`}>
-          <div className="label">Lotes vencidos</div>
-          <div className="value">{a?.vencidos.length ?? '–'}</div>
-        </div>
-        <div className={`card stat${a?.porVencer.length ? ' warn' : ''}`}>
-          <div className="label">Vencen en {a?.diasAviso ?? 15} días</div>
-          <div className="value">{a?.porVencer.length ?? '–'}</div>
-        </div>
-        <div className={`card stat${a?.stockBajo.length ? ' warn' : ''}`}>
-          <div className="label">Bajo stock mínimo</div>
-          <div className="value">{a?.stockBajo.length ?? '–'}</div>
-        </div>
-        <div className="card stat">
-          <div className="label">Deuda con proveedores</div>
-          <div className="value">{money(deuda)}</div>
-        </div>
+        <Stat label="Lotes vencidos" valor={a?.vencidos.length} tono="danger" to="#vencidos" />
+        <Stat label={`Vencen en ${a?.diasAviso ?? 15} días`} valor={a?.porVencer.length} tono="warn" to="#por-vencer" />
+        <Stat label="Bajo stock mínimo" valor={a?.stockBajo.length} tono="warn" to="/productos?filtro=stock-bajo" />
+        <Stat label="Deuda con proveedores" valor={pendientes ? deuda : undefined} texto={money(deuda)} to="/cuentas-por-pagar" />
       </div>
 
       {vencenPronto.length > 0 && (
@@ -64,7 +52,7 @@ export default function Inicio() {
       )}
 
       {a && a.vencidos.length > 0 && (
-        <div className="card">
+        <div className="card" id="vencidos">
           <div className="card-head">
             <h2>Productos vencidos</h2>
             <span className="badge danger">Envíalos a merma para contabilizarlos</span>
@@ -74,7 +62,7 @@ export default function Inicio() {
       )}
 
       <div className="grid-2" style={{ alignItems: 'start' }}>
-        <div className="card">
+        <div className="card" id="por-vencer">
           <div className="card-head">
             <h2>Por vencer</h2>
           </div>
@@ -143,5 +131,23 @@ function TablaLotes({ lotes, onMerma }: { lotes: Lote[]; onMerma: (l: Lote) => v
         </tbody>
       </table>
     </div>
+  );
+}
+
+/** Indicador de Inicio: en cero queda apagado; con valor toma su color y lleva al detalle. */
+function Stat({ label, valor, texto, tono, to }: { label: string; valor?: number; texto?: string; tono?: 'warn' | 'danger'; to: string }) {
+  const activo = !!valor && valor > 0;
+  const clase = `card stat${activo ? ` activo${tono ? ` ${tono}` : ''}` : ' cero'}`;
+  const cuerpo = (
+    <>
+      <div className="label">{label}</div>
+      <div className="value">{valor === undefined ? '–' : texto ?? valor}</div>
+    </>
+  );
+  if (!activo) return <div className={clase}>{cuerpo}</div>;
+  return to.startsWith('#') ? (
+    <a className={clase} href={to}>{cuerpo}</a>
+  ) : (
+    <Link className={clase} to={to}>{cuerpo}</Link>
   );
 }
