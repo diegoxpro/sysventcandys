@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { Campo, Modal, useCarga, useToast } from '../components/ui';
-import { fechaHora, n, precioSugerido } from '../format';
-import { Configuracion as Config, EstadoBackup, Rol, Serie, Usuario } from '../types';
+import { fecha, fechaHora, n, precioSugerido } from '../format';
+import { Configuracion as Config, EstadoBackup, EstadoSunatGeneral, Rol, Serie, SUNAT_LABEL, Usuario } from '../types';
 
 export default function Configuracion() {
   const { esAdmin } = useAuth();
@@ -16,6 +16,7 @@ export default function Configuracion() {
           <button className={tab === 'preferencias' ? 'active' : ''} onClick={() => setTab('preferencias')}>Preferencias</button>
           <button className={tab === 'series' ? 'active' : ''} onClick={() => setTab('series')}>Comprobantes</button>
           <button className={tab === 'usuarios' ? 'active' : ''} onClick={() => setTab('usuarios')}>Usuarios</button>
+          <button className={tab === 'sunat' ? 'active' : ''} onClick={() => setTab('sunat')}>SUNAT</button>
           <button className={tab === 'backup' ? 'active' : ''} onClick={() => setTab('backup')}>Backup</button>
           <button className={tab === 'cuenta' ? 'active' : ''} onClick={() => setTab('cuenta')}>Mi contraseña</button>
         </div>
@@ -23,6 +24,7 @@ export default function Configuracion() {
       {tab === 'preferencias' && <Preferencias />}
       {tab === 'series' && <Series />}
       {tab === 'usuarios' && <Usuarios />}
+      {tab === 'sunat' && <Sunat />}
       {tab === 'backup' && <Backups />}
       {tab === 'cuenta' && <MiCuenta />}
     </div>
@@ -132,6 +134,204 @@ function Preferencias() {
         </div>
       </div>
       <div><button className="btn btn-primary" onClick={guardar}>Guardar preferencias</button></div>
+    </div>
+  );
+}
+
+const EMISOR = [
+  ['empresaRuc', 'RUC', '10715971963'],
+  ['empresaRazonSocial', 'Razón social (como figura en SUNAT)', 'DIEGO MARTIN GUEVARA VASQUEZ'],
+  ['empresaDireccion', 'Dirección fiscal', 'JR. LOS OLIVOS 130 - URB. LOS JARDINES'],
+  ['empresaUbigeo', 'Ubigeo', '220901'],
+  ['empresaDepartamento', 'Departamento', 'SAN MARTIN'],
+  ['empresaProvincia', 'Provincia', 'SAN MARTIN'],
+  ['empresaDistrito', 'Distrito', 'TARAPOTO'],
+  ['codigoEstablecimiento', 'Código de establecimiento', '0000'],
+] as const;
+type CampoEmisor = (typeof EMISOR)[number][0];
+
+function Sunat() {
+  const avisar = useToast();
+  const { data: cfg } = useCarga(() => api<Config>('/configuracion'), []);
+  const { data: estado, setData: setEstado } = useCarga(() => api<EstadoSunatGeneral>('/sunat/estado'), []);
+  const [f, setF] = useState<(Record<CampoEmisor, string> & { sunatModo: Config['sunatModo'] }) | null>(null);
+  const [archivo, setArchivo] = useState<File | null>(null);
+  const [claveCert, setClaveCert] = useState('');
+  const [sol, setSol] = useState({ usuario: '', clave: '' });
+  const [ocupado, setOcupado] = useState('');
+  useEffect(() => {
+    if (cfg)
+      setF({
+        ...(Object.fromEntries(EMISOR.map(([k]) => [k, (cfg[k] as string | null) ?? ''])) as Record<CampoEmisor, string>),
+        sunatModo: cfg.sunatModo,
+      });
+  }, [cfg]);
+  useEffect(() => {
+    if (estado?.solUsuario) setSol((s) => ({ ...s, usuario: s.usuario || estado.solUsuario! }));
+  }, [estado]);
+  if (!f || !estado) return null;
+
+  const tarea = async (nombre: string, fn: () => Promise<void>) => {
+    setOcupado(nombre);
+    try {
+      await fn();
+    } catch (e) {
+      avisar((e as Error).message, true);
+    } finally {
+      setOcupado('');
+    }
+  };
+
+  const guardar = () =>
+    tarea('guardar', async () => {
+      const { sunatModo, ...emisor } = f;
+      if (sunatModo === 'PRODUCCION' && !estado.solConfigurado) throw new Error('Para producción primero guarda el usuario SOL secundario');
+      if (sunatModo !== 'DESACTIVADO' && !estado.certificado) throw new Error('Primero carga el certificado digital');
+      await api('/configuracion', {
+        method: 'PATCH',
+        body: { ...Object.fromEntries(Object.entries(emisor).map(([k, v]) => [k, v.trim()])), sunatModo },
+      });
+      setEstado(await api<EstadoSunatGeneral>('/sunat/estado'));
+      avisar('Datos de SUNAT guardados');
+    });
+
+  const subirCertificado = () =>
+    tarea('cert', async () => {
+      if (!archivo) throw new Error('Elige el archivo .pfx');
+      const base64 = await new Promise<string>((ok, mal) => {
+        const lector = new FileReader();
+        lector.onload = () => ok(String(lector.result).split(',')[1]);
+        lector.onerror = () => mal(new Error('No se pudo leer el archivo'));
+        lector.readAsDataURL(archivo);
+      });
+      setEstado(await api<EstadoSunatGeneral>('/sunat/certificado', { body: { archivo: base64, clave: claveCert } }));
+      setArchivo(null);
+      setClaveCert('');
+      avisar('Certificado cargado');
+    });
+
+  const guardarSol = () =>
+    tarea('sol', async () => {
+      setEstado(await api<EstadoSunatGeneral>('/sunat/sol', { body: { usuario: sol.usuario.trim().toUpperCase(), clave: sol.clave } }));
+      setSol((s) => ({ ...s, clave: '' }));
+      avisar('Usuario SOL guardado');
+    });
+
+  const probar = () =>
+    tarea('beta', async () => {
+      const r = await api<{ codigo: string; descripcion: string; observaciones: string[] }>('/sunat/probar-beta', { method: 'POST' });
+      const ok = r.codigo === '0';
+      avisar(ok ? `SUNAT beta aceptó la boleta de prueba: ${r.descripcion}` : `SUNAT beta respondió ${r.codigo}: ${r.descripcion}`, !ok);
+    });
+
+  const dias = estado.certificado ? Math.floor((new Date(estado.certificado.venceEl).getTime() - Date.now()) / 86_400_000) : 0;
+  const conteo = Object.entries(estado.conteo).filter(([k, v]) => k !== 'NO_APLICA' && v);
+  return (
+    <div className="stack" style={{ maxWidth: 820 }}>
+      {estado.atrasadas > 0 && (
+        <div className="alert danger">
+          Hay {estado.atrasadas} boletas con más de 2 días sin aceptar en SUNAT. Revísalas en Ventas: el plazo para enviarlas es corto.
+        </div>
+      )}
+      <div className="card card-pad stack">
+        <div>
+          <h2>Envío de boletas</h2>
+          <p className="muted small" style={{ margin: '4px 0 0' }}>
+            Las boletas B001 se firman con tu certificado y se envían a SUNAT apenas se emiten. Sin internet quedan "por enviar" y se reintenta solo cada
+            2 minutos. Las boletas libres (L001) nunca se envían.
+          </p>
+        </div>
+        <Campo label="Modo">
+          <select value={f.sunatModo} onChange={(e) => setF({ ...f, sunatModo: e.target.value as Config['sunatModo'] })} style={{ maxWidth: 360 }}>
+            <option value="DESACTIVADO">Desactivado (no se envía nada)</option>
+            <option value="BETA">Pruebas (SUNAT beta, sin validez)</option>
+            <option value="PRODUCCION">Producción (boletas reales)</option>
+          </select>
+        </Campo>
+        {conteo.length > 0 && (
+          <div className="row small" style={{ gap: 8 }}>
+            {conteo.map(([k, v]) => (
+              <span key={k} className={`badge ${SUNAT_LABEL[k as keyof typeof SUNAT_LABEL].clase}`}>
+                {SUNAT_LABEL[k as keyof typeof SUNAT_LABEL].texto}: {v}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="card card-pad stack">
+        <h2>Datos del emisor</h2>
+        <div className="grid-2">
+          {EMISOR.map(([k, label, ejemplo]) => (
+            <Campo key={k} label={label} className={k === 'empresaRazonSocial' || k === 'empresaDireccion' ? 'span-2' : ''}>
+              <input
+                className={k === 'empresaRuc' || k === 'empresaUbigeo' || k === 'codigoEstablecimiento' ? 'mono' : ''}
+                value={f[k]}
+                placeholder={ejemplo}
+                maxLength={k === 'empresaRuc' ? 11 : k === 'empresaUbigeo' ? 6 : k === 'codigoEstablecimiento' ? 4 : undefined}
+                onChange={(e) => setF({ ...f, [k]: e.target.value })}
+              />
+            </Campo>
+          ))}
+        </div>
+        <p className="small muted" style={{ margin: 0 }}>
+          El nombre comercial del ticket se toma de Preferencias. El código de establecimiento es 0000 si solo tienes el domicilio fiscal.
+        </p>
+        <div><button className="btn btn-primary" onClick={guardar} disabled={!!ocupado}>Guardar</button></div>
+      </div>
+      <div className="card card-pad stack">
+        <div>
+          <h2>Certificado digital</h2>
+          <p className="muted small" style={{ margin: '4px 0 0' }}>
+            Se guarda solo en esta PC, en la carpeta <span className="mono">backend/secretos</span>. No va a la base de datos ni a los backups: guarda tu
+            .pfx original en un lugar seguro.
+          </p>
+        </div>
+        {estado.certificado ? (
+          <div className={`alert ${dias < 30 ? 'warn' : 'info'}`}>
+            <div>
+              <b>{estado.certificado.sujeto}</b>
+              <div className="small">
+                Emitido por {estado.certificado.emisor} · vence el {fecha(estado.certificado.venceEl)}
+                {dias < 30 && ` (en ${Math.max(dias, 0)} días, renuévalo)`}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="alert warn">{estado.errorCertificado ?? 'Aún no hay certificado cargado.'}</div>
+        )}
+        <div className="grid-2">
+          <Campo label="Archivo .pfx o .p12">
+            <input type="file" accept=".pfx,.p12" onChange={(e) => setArchivo(e.target.files?.[0] ?? null)} />
+          </Campo>
+          <Campo label="Contraseña del certificado">
+            <input type="password" autoComplete="off" value={claveCert} onChange={(e) => setClaveCert(e.target.value)} />
+          </Campo>
+        </div>
+        <div className="row">
+          <button className="btn" onClick={subirCertificado} disabled={!!ocupado || !archivo}>{ocupado === 'cert' ? 'Cargando…' : 'Cargar certificado'}</button>
+          <button className="btn" onClick={probar} disabled={!!ocupado || !estado.certificado}>{ocupado === 'beta' ? 'Probando…' : 'Probar con SUNAT beta'}</button>
+        </div>
+        <p className="small muted" style={{ margin: 0 }}>
+          La prueba firma una boleta de S/ 1.00 y la envía al entorno beta de SUNAT (no tiene validez). Necesita internet y el RUC guardado arriba.
+        </p>
+      </div>
+      <div className="card card-pad stack">
+        <div>
+          <h2>Usuario SOL secundario</h2>
+          <p className="muted small" style={{ margin: '4px 0 0' }}>
+            Solo para producción. Créalo en SUNAT Operaciones en Línea con el perfil de envío de comprobantes electrónicos. No uses tu usuario principal.
+          </p>
+        </div>
+        <div className="grid-2">
+          <Campo label="Usuario" ayuda="Sin el RUC; el sistema lo antepone">
+            <input className="mono" value={sol.usuario} onChange={(e) => setSol({ ...sol, usuario: e.target.value })} autoComplete="off" />
+          </Campo>
+          <Campo label="Clave SOL" ayuda={estado.solConfigurado ? 'Ya hay una clave guardada; escribe otra solo para cambiarla' : undefined}>
+            <input type="password" value={sol.clave} onChange={(e) => setSol({ ...sol, clave: e.target.value })} autoComplete="new-password" />
+          </Campo>
+        </div>
+        <div><button className="btn" onClick={guardarSol} disabled={!!ocupado || !sol.usuario.trim()}>Guardar usuario SOL</button></div>
+      </div>
     </div>
   );
 }

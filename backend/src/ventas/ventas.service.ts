@@ -5,6 +5,7 @@ import { UsuarioSesion } from '../auth/decorators';
 import { CajaService } from '../caja/caja.service';
 import { ConfiguracionService } from '../configuracion/configuracion.service';
 import { StockService } from '../inventario/stock.service';
+import { SunatService } from '../sunat/sunat.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { calcularPagos, calcularTotales, r2 } from './calculos';
 import { AnularVentaDto, CrearVentaDto } from './ventas.dto';
@@ -34,6 +35,7 @@ export class VentasService {
     private readonly caja: CajaService,
     private readonly config: ConfiguracionService,
     private readonly auth: AuthService,
+    private readonly sunat: SunatService,
   ) {}
 
   async crear(dto: CrearVentaDto, user: UsuarioSesion) {
@@ -62,7 +64,13 @@ export class VentasService {
       throw new BadRequestException((e as Error).message);
     }
 
+    if (dto.tipoComprobante === TipoComprobante.BOLETA && totales.total >= 700) {
+      const cliente = dto.clienteId ? await this.prisma.cliente.findUnique({ where: { id: dto.clienteId } }) : null;
+      if (!cliente?.numeroDoc) throw new BadRequestException('Una boleta de S/ 700 o más necesita el DNI o RUC del cliente');
+    }
+
     const cfg = await this.config.obtener();
+    const electronica = dto.tipoComprobante === TipoComprobante.BOLETA && cfg.sunatModo !== 'DESACTIVADO';
     const id = await this.prisma.$transaction(async (tx) => {
       const caja = await this.caja.exigirAbierta(tx);
 
@@ -95,6 +103,7 @@ export class VentasService {
           efectivoRecibido: pagos.efectivoRecibido || null,
           vuelto: pagos.vuelto,
           autorizadoPorId,
+          estadoSunat: electronica ? 'PENDIENTE' : 'NO_APLICA',
           items: {
             create: lineas.map((l, i) => ({
               productoId: l.producto.id,
@@ -129,6 +138,11 @@ export class VentasService {
       }
       return venta.id;
     });
+    if (electronica) {
+      // Se firma al momento para imprimir el hash y el QR; el envío no hace esperar al cajero.
+      await this.sunat.firmarVenta(id).catch((e) => console.warn(`Firma pendiente de venta ${id}: ${(e as Error).message}`));
+      void this.sunat.enviarVenta(id).catch(() => undefined);
+    }
     return this.obtener(id);
   }
 
@@ -195,12 +209,13 @@ export class VentasService {
         where: { id },
         data: { estado: EstadoVenta.ANULADA, anuladaPorId, fechaAnulacion: new Date(), motivoAnulacion: dto.motivo },
       });
+      await this.sunat.marcarBaja(tx, id);
     });
     return this.obtener(id);
   }
 
   async obtener(id: number) {
-    const v = await this.prisma.venta.findUnique({ where: { id }, include: detalle });
+    const v = await this.prisma.venta.findUnique({ where: { id }, include: detalle, omit: { xmlFirmado: true } });
     if (!v) throw new NotFoundException('Venta no encontrada');
     return v;
   }
@@ -218,6 +233,7 @@ export class VentasService {
     }
     return this.prisma.venta.findMany({
       where,
+      omit: { xmlFirmado: true },
       include: { cliente: { select: { nombre: true } }, usuario: { select: { nombre: true } }, pagos: true },
       orderBy: { id: 'desc' },
       take: 1000,

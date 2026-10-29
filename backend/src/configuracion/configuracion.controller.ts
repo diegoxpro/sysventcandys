@@ -1,12 +1,12 @@
 import { Body, Controller, Get, Patch } from '@nestjs/common';
-import { Rol } from '@prisma/client';
-import { IsBoolean, IsInt, IsNumber, IsOptional, IsString, Matches, Max, Min } from 'class-validator';
+import { ModoSunat, Rol } from '@prisma/client';
+import { IsBoolean, IsEnum, IsInt, IsNumber, IsOptional, IsString, Matches, Max, Min } from 'class-validator';
 import { Roles } from '../auth/decorators';
 import { ConfiguracionService } from './configuracion.service';
 
 class ActualizarConfiguracionDto {
   @IsOptional() @IsString() empresaNombre?: string;
-  @IsOptional() @IsString() empresaRuc?: string;
+  @IsOptional() @Matches(/^\d{11}$/, { message: 'El RUC tiene 11 dígitos' }) empresaRuc?: string;
   @IsOptional() @IsString() empresaDireccion?: string;
   @IsOptional() @IsBoolean() permitirVentaSinStock?: boolean;
   @IsOptional() @IsNumber() @Min(0) @Max(1000) margen1?: number;
@@ -20,6 +20,13 @@ class ActualizarConfiguracionDto {
   @IsOptional() @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'Hora en formato HH:MM' }) backupHora?: string;
   @IsOptional() @IsInt() @Min(1) @Max(365) backupConservar?: number;
   @IsOptional() @IsString() pgDumpRuta?: string;
+  @IsOptional() @IsString() empresaRazonSocial?: string;
+  @IsOptional() @Matches(/^\d{6}$/, { message: 'El ubigeo tiene 6 dígitos' }) empresaUbigeo?: string;
+  @IsOptional() @IsString() empresaDepartamento?: string;
+  @IsOptional() @IsString() empresaProvincia?: string;
+  @IsOptional() @IsString() empresaDistrito?: string;
+  @IsOptional() @Matches(/^\d{4}$/, { message: 'Código de establecimiento de 4 dígitos' }) codigoEstablecimiento?: string;
+  @IsOptional() @IsEnum(ModoSunat) sunatModo?: ModoSunat;
 }
 
 @Controller('configuracion')

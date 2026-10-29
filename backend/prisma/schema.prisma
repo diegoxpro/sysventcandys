@@ -80,27 +80,35 @@ model Usuario {
 
 // Fila única (id = 1) con los datos de la tienda y las preferencias.
 model Configuracion {
-  id                    Int      @id @default(1)
-  empresaNombre         String   @default("CANDY'S MARKET")
+  id                    Int       @id @default(1)
+  empresaNombre         String    @default("CANDY'S MARKET")
   empresaRuc            String?
   empresaDireccion      String?
-  permitirVentaSinStock Boolean  @default(false)
+  permitirVentaSinStock Boolean   @default(false)
   // Margen de ganancia por defecto (%) sobre el costo para cada precio.
-  margen1               Decimal  @default(25) @db.Decimal(6, 2)
-  margen2               Decimal  @default(20) @db.Decimal(6, 2)
-  margen3               Decimal  @default(15) @db.Decimal(6, 2)
+  margen1               Decimal   @default(25) @db.Decimal(6, 2)
+  margen2               Decimal   @default(20) @db.Decimal(6, 2)
+  margen3               Decimal   @default(15) @db.Decimal(6, 2)
   // Los precios sugeridos se redondean hacia arriba a este múltiplo (S/ 0.10).
-  redondeoPrecio        Decimal  @default(0.10) @db.Decimal(6, 2)
-  diasAvisoVencimiento  Int      @default(15)
-  montoInicialCaja      Decimal  @default(150) @db.Decimal(12, 2)
-  mensajeTicket         String?  @default("¡Gracias por su compra!")
+  redondeoPrecio        Decimal   @default(0.10) @db.Decimal(6, 2)
+  diasAvisoVencimiento  Int       @default(15)
+  montoInicialCaja      Decimal   @default(150) @db.Decimal(12, 2)
+  mensajeTicket         String?   @default("¡Gracias por su compra!")
   // Carpeta sincronizada con Google Drive (Google Drive para escritorio).
   backupCarpeta         String?
-  backupHora            String   @default("22:00")
-  backupConservar       Int      @default(30)
+  backupHora            String    @default("22:00")
+  backupConservar       Int       @default(30)
   // Ruta de pg_dump; vacío = buscarlo en el PATH.
   pgDumpRuta            String?
-  updatedAt             DateTime @updatedAt
+  // Datos del emisor para la facturación electrónica.
+  empresaRazonSocial    String?
+  empresaUbigeo         String?
+  empresaDepartamento   String?
+  empresaProvincia      String?
+  empresaDistrito       String?
+  codigoEstablecimiento String    @default("0000")
+  sunatModo             ModoSunat @default(DESACTIVADO)
+  updatedAt             DateTime  @updatedAt
 }
 
 model Categoria {
@@ -266,6 +274,31 @@ model PagoProveedor {
 
 // ---------------------------------------------------------------- Ventas y caja
 
+enum ModoSunat {
+  DESACTIVADO
+  BETA
+  PRODUCCION
+}
+
+enum EstadoSunat {
+  // Boleta libre o facturación electrónica desactivada.
+  NO_APLICA
+  PENDIENTE
+  ACEPTADO
+  OBSERVADO
+  RECHAZADO
+  // Boleta aceptada y luego anulada: se informa en un resumen diario.
+  BAJA_PENDIENTE
+  BAJA_ENVIADA
+  BAJA_ACEPTADA
+}
+
+enum EstadoResumen {
+  ENVIADO
+  ACEPTADO
+  RECHAZADO
+}
+
 enum TipoComprobante {
   BOLETA
   // Documento interno que no va a SUNAT ("boleta de venta libre").
@@ -382,6 +415,16 @@ model Venta {
   anuladaPorId     Int?
   fechaAnulacion   DateTime?
   motivoAnulacion  String?
+  // Facturación electrónica
+  estadoSunat      EstadoSunat     @default(NO_APLICA)
+  hashCpe          String?
+  xmlFirmado       String?
+  cdrCodigo        String?
+  cdrMensaje       String?
+  sunatEnviadoEn   DateTime?
+  sunatIntentos    Int             @default(0)
+  sunatError       String?
+  resumenBajaId    Int?
 
   caja          Caja              @relation(fields: [cajaId], references: [id])
   usuario       Usuario           @relation("VentaUsuario", fields: [usuarioId], references: [id])
@@ -392,8 +435,10 @@ model Venta {
   items         VentaItem[]
   pagos         VentaPago[]
   movimientos   MovimientoStock[]
+  resumenBaja   ResumenDiario?    @relation(fields: [resumenBajaId], references: [id])
 
   @@unique([serie, numero])
+  @@index([estadoSunat])
   @@index([fecha])
   @@index([cajaId])
 }
@@ -433,4 +478,18 @@ model Backup {
   ok      Boolean
   origen  String
   error   String?
+}
+
+// Resumen diario enviado a SUNAT para dar de baja boletas.
+model ResumenDiario {
+  id              Int           @id @default(autoincrement())
+  identificador   String        @unique
+  fechaReferencia DateTime      @db.Date
+  fechaGeneracion DateTime      @default(now())
+  ticket          String?
+  estado          EstadoResumen @default(ENVIADO)
+  cdrCodigo       String?
+  mensaje         String?
+  xmlFirmado      String?
+  ventas          Venta[]
 }
