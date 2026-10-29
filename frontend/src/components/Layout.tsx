@@ -1,8 +1,19 @@
 import { NavLink, Outlet } from 'react-router-dom';
+import { ReactNode } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { Alertas } from '../types';
+import { Icono, NombreIcono } from './icons';
 import { useCarga } from './ui';
+
+function Enlace({ to, icono, children, end }: { to: string; icono: NombreIcono; children: ReactNode; end?: boolean }) {
+  return (
+    <NavLink to={to} end={end}>
+      <Icono nombre={icono} />
+      <span className="grow">{children}</span>
+    </NavLink>
+  );
+}
 
 export default function Layout() {
   const { usuario, salir, esAdmin } = useAuth();
@@ -21,24 +32,32 @@ export default function Layout() {
         </div>
         <nav className="nav">
           <NavLink to="/" end>
-            Inicio {nAlertas > 0 && <span className="pill">{nAlertas}</span>}
+            <Icono nombre="inicio" />
+            <span className="grow">Inicio</span>
+            {nAlertas > 0 && <span className="pill" aria-label={`${nAlertas} alertas`}>{nAlertas}</span>}
           </NavLink>
           <div className="nav-group">Almacén</div>
-          <NavLink to="/productos">Productos</NavLink>
-          <NavLink to="/inventario">Inventario y mermas</NavLink>
+          <Enlace to="/productos" icono="productos">Productos</Enlace>
+          <Enlace to="/inventario" icono="inventario">Inventario y mermas</Enlace>
           <div className="nav-group">Compras</div>
-          <NavLink to="/compras">Compras</NavLink>
-          <NavLink to="/cuentas-por-pagar">Cuentas por pagar</NavLink>
-          <NavLink to="/proveedores">Proveedores</NavLink>
+          <Enlace to="/compras" icono="compras">Compras</Enlace>
+          <Enlace to="/cuentas-por-pagar" icono="pagar">Cuentas por pagar</Enlace>
+          <Enlace to="/proveedores" icono="proveedores">Proveedores</Enlace>
           <div className="nav-group">Sistema</div>
-          <NavLink to="/configuracion">{esAdmin ? 'Configuración' : 'Mi cuenta'}</NavLink>
+          <Enlace to="/configuracion" icono="config">{esAdmin ? 'Configuración' : 'Mi cuenta'}</Enlace>
         </nav>
         <div className="sidebar-foot">
-          <div>{usuario?.nombre}</div>
-          <div className="row" style={{ justifyContent: 'space-between', marginTop: 2 }}>
-            <span style={{ color: '#a8a29a', fontSize: 12 }}>{usuario?.rol === 'ADMIN' ? 'Administrador' : 'Cajero'}</span>
-            <button onClick={salir}>Salir</button>
+          <div className="avatar" aria-hidden="true">{usuario?.nombre.charAt(0).toUpperCase()}</div>
+          <div className="grow quien">
+            <b>{usuario?.nombre}</b>
+            {/* El rol solo se muestra si no repite el nombre (p. ej. el usuario "Administrador"). */}
+            {usuario && usuario.nombre.toLowerCase() !== (usuario.rol === 'ADMIN' ? 'administrador' : 'cajero') && (
+              <span>{usuario.rol === 'ADMIN' ? 'Administrador' : 'Cajero'}</span>
+            )}
           </div>
+          <button className="salir" onClick={salir} title="Cerrar sesión" aria-label="Cerrar sesión">
+            <Icono nombre="salir" />
+          </button>
         </div>
       </aside>
       <main className="main">

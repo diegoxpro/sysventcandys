@@ -4,7 +4,7 @@ import { api } from '../api';
 import BuscadorProducto from '../components/BuscadorProducto';
 import ProveedorForm from '../components/ProveedorForm';
 import SugerenciasModal from '../components/SugerenciasModal';
-import { Campo, useCarga, useToast, Vacio } from '../components/ui';
+import { Campo, Kbd, useAtajos, useCarga, useToast, Vacio } from '../components/ui';
 import { hoyISO, money, n } from '../format';
 import { Compra, DOC_LABEL, MEDIO_LABEL, MEDIOS, MedioPago, Producto, Proveedor, Sugerencia, TipoDoc } from '../types';
 
@@ -97,6 +97,11 @@ export default function NuevaCompra() {
       setEnviando(false);
     }
   };
+  useAtajos({
+    F2: () => buscador.current?.focus(),
+    F9: () => !enviando && !faltan.length && guardar(),
+  });
+
 
   return (
     <div className="stack">
@@ -221,7 +226,7 @@ export default function NuevaCompra() {
             </div>
             <button className="btn" onClick={() => navegar('/compras')}>Cancelar</button>
             <button className="btn btn-primary" onClick={guardar} disabled={enviando || faltan.length > 0}>
-              {enviando ? 'Guardando…' : 'Guardar compra'}
+              {enviando ? 'Guardando…' : <>Guardar compra <Kbd>F9</Kbd></>}
             </button>
           </div>
         </div>

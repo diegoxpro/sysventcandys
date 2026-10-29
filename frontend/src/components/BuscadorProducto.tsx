@@ -50,7 +50,7 @@ const BuscadorProducto = forwardRef<HTMLInputElement, { onElegir: (p: Producto) 
     };
 
     return (
-      <div className="search" style={{ position: 'relative' }}>
+      <div className="search">
         <input
           ref={ref}
           value={texto}
@@ -59,15 +59,22 @@ const BuscadorProducto = forwardRef<HTMLInputElement, { onElegir: (p: Producto) 
           onBlur={() => setTimeout(() => setOpciones([]), 150)}
           placeholder={placeholder ?? 'Escanea el código o escribe el nombre'}
           autoComplete="off"
+          role="combobox"
+          aria-expanded={opciones.length > 0}
+          aria-controls="buscador-opciones"
+          aria-activedescendant={opciones[activa] ? `buscador-op-${opciones[activa].id}` : undefined}
         />
         {opciones.length > 0 && (
-          <div className="card" style={{ position: 'absolute', top: 40, left: 0, right: 0, zIndex: 20, boxShadow: 'var(--shadow)', maxHeight: 360, overflow: 'auto' }}>
+          <div className="sugerencias" id="buscador-opciones" role="listbox">
             {opciones.map((p, i) => (
               <div
                 key={p.id}
+                id={`buscador-op-${p.id}`}
+                role="option"
+                aria-selected={i === activa}
+                className="sugerencia"
                 onMouseDown={() => elegir(p)}
                 onMouseEnter={() => setActiva(i)}
-                style={{ padding: '8px 12px', cursor: 'pointer', background: i === activa ? 'var(--accent-soft)' : undefined, display: 'flex', gap: 12 }}
               >
                 <div className="grow">
                   <div>{p.nombre}</div>
