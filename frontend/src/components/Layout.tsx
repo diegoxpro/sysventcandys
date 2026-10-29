@@ -37,9 +37,9 @@ export default function Layout() {
             {nAlertas > 0 && <span className="pill" aria-label={`${nAlertas} alertas`}>{nAlertas}</span>}
           </NavLink>
           <div className="nav-group">Ventas</div>
-          <NavLink to="/venta">Venta</NavLink>
-          <NavLink to="/caja">Caja</NavLink>
-          <NavLink to="/ventas">Ventas realizadas</NavLink>
+          <Enlace to="/venta" icono="venta">Venta</Enlace>
+          <Enlace to="/caja" icono="caja">Caja</Enlace>
+          <Enlace to="/ventas" icono="compras">Ventas realizadas</Enlace>
           <div className="nav-group">Almacén</div>
           <Enlace to="/productos" icono="productos">Productos</Enlace>
           <Enlace to="/inventario" icono="inventario">Inventario y mermas</Enlace>

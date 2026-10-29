@@ -5,7 +5,7 @@ import { useAutorizacion } from '../autorizacion';
 import BuscadorProducto from '../components/BuscadorProducto';
 import ClienteModal from '../components/ClienteModal';
 import CobroModal, { PagoVenta } from '../components/CobroModal';
-import { useCarga, useToast } from '../components/ui';
+import { Kbd, useAtajos, useCarga, useToast } from '../components/ui';
 import { money, n, qty } from '../format';
 import { correlativo, imprimirVenta } from '../ticket';
 import { Caja, Cliente, COMPROBANTE_LABEL, Configuracion, Producto, TipoComprobante, Venta as TVenta } from '../types';
@@ -135,20 +135,16 @@ export default function Venta() {
   };
 
   // Atajos de teclado del punto de venta.
-  useEffect(() => {
-    const tecla = (e: KeyboardEvent) => {
-      if (cobrando || eligiendoCliente || document.querySelector('.modal')) return;
-      if (e.key === 'F2') buscador.current?.focus();
-      else if (e.key === 'F4') set({ tipo: b.tipo === 'BOLETA' ? 'BOLETA_LIBRE' : 'BOLETA' });
-      else if (e.key === 'F6') set({ nivel: ((b.nivel % 3) + 1) as 1 | 2 | 3 });
-      else if (e.key === 'F7') setEligiendoCliente(true);
-      else if (e.key === 'F9' && b.lineas.length && total > 0) setCobrando(true);
-      else return;
-      e.preventDefault();
-    };
-    window.addEventListener('keydown', tecla);
-    return () => window.removeEventListener('keydown', tecla);
-  }, [b, cobrando, eligiendoCliente, total]);
+  useAtajos(
+    {
+      F2: () => buscador.current?.focus(),
+      F4: () => set({ tipo: b.tipo === 'BOLETA' ? 'BOLETA_LIBRE' : 'BOLETA' }),
+      F6: () => set({ nivel: ((b.nivel % 3) + 1) as 1 | 2 | 3 }),
+      F7: () => setEligiendoCliente(true),
+      F9: () => b.lineas.length && total > 0 && setCobrando(true),
+    },
+    { activo: !!caja },
+  );
 
   if (cargandoCaja) return null;
   if (!caja) {
@@ -249,11 +245,11 @@ export default function Venta() {
           )}
         </div>
         <div className="atajos">
-          <span><span className="kbd">F2</span> Buscar</span>
-          <span><span className="kbd">F4</span> Boleta / libre</span>
-          <span><span className="kbd">F6</span> Precio 1-2-3</span>
-          <span><span className="kbd">F7</span> Cliente</span>
-          <span><span className="kbd">F9</span> Cobrar</span>
+          <span><Kbd>F2</Kbd> Buscar</span>
+          <span><Kbd>F4</Kbd> Boleta / libre</span>
+          <span><Kbd>F6</Kbd> Precio 1-2-3</span>
+          <span><Kbd>F7</Kbd> Cliente</span>
+          <span><Kbd>F9</Kbd> Cobrar</span>
         </div>
       </div>
 
@@ -281,7 +277,7 @@ export default function Venta() {
           <button className="btn" onClick={pedirDescuento} disabled={!b.lineas.length}>Aplicar descuento</button>
         </div>
         <button className="btn btn-primary btn-cobrar" disabled={!b.lineas.length || total <= 0} onClick={() => setCobrando(true)}>
-          Cobrar <span className="kbd" style={{ marginLeft: 6 }}>F9</span>
+          Cobrar <Kbd>F9</Kbd>
         </button>
         <button className="btn" disabled={!b.lineas.length} onClick={() => window.confirm('¿Cancelar la venta en curso?') && limpiar()}>Cancelar venta</button>
         <div className="small muted" style={{ textAlign: 'center' }}>
