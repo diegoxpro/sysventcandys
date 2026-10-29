@@ -5,10 +5,11 @@ import { useAuth } from '../auth';
 import MermaModal, { MermaInicial } from '../components/MermaModal';
 import { useCarga, Vacio } from '../components/ui';
 import { diasHasta, fecha, money, n, qty } from '../format';
-import { Alertas, Compra, Lote } from '../types';
+import { Alertas, Compra, EstadoBackup, Lote } from '../types';
 
 export default function Inicio() {
-  const { usuario } = useAuth();
+  const { usuario, esAdmin } = useAuth();
+  const { data: backup } = useCarga(() => (esAdmin ? api<EstadoBackup>('/backups') : Promise.resolve(null)), [esAdmin]);
   const { data: a, recargar } = useCarga(() => api<Alertas>('/inventario/alertas'), []);
   const { data: pendientes } = useCarga(() => api<Compra[]>(`/compras${qs({ pendientes: 1 })}`), []);
   const [merma, setMerma] = useState<MermaInicial | null>(null);
@@ -41,6 +42,14 @@ export default function Inicio() {
         <Stat label="Bajo stock mínimo" valor={a?.stockBajo.length} tono="warn" to="/productos?filtro=stock-bajo" />
         <Stat label="Deuda con proveedores" valor={pendientes ? deuda : undefined} texto={money(deuda)} to="/cuentas-por-pagar" />
       </div>
+
+      {backup?.atrasado && (
+        <div className="alert warn">
+          <div>
+            <b>No hay un backup reciente de tus datos.</b> <Link to="/configuracion">Revisa la configuración de backup</Link>
+          </div>
+        </div>
+      )}
 
       {vencenPronto.length > 0 && (
         <div className="alert warn">

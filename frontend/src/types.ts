@@ -120,6 +120,30 @@ export interface Configuracion {
   diasAvisoVencimiento: number;
   montoInicialCaja: Dec;
   mensajeTicket: string | null;
+  backupCarpeta: string | null;
+  backupHora: string;
+  backupConservar: number;
+  pgDumpRuta: string | null;
+}
+
+export interface Backup {
+  id: number;
+  fecha: string;
+  archivo: string | null;
+  tamano: number | null;
+  ok: boolean;
+  origen: string;
+  error: string | null;
+}
+
+export interface EstadoBackup {
+  carpeta: string | null;
+  carpetaLocal: string;
+  hora: string;
+  conservar: number;
+  ultimoOk: Backup | null;
+  atrasado: boolean;
+  historial: Backup[];
 }
 
 export interface Movimiento {

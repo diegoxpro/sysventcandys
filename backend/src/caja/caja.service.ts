@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { EstadoCaja, EstadoVenta, MedioPago, Prisma, TipoMovimientoCaja } from '@prisma/client';
+import { BackupService } from '../backup/backup.service';
 import { ConfiguracionService } from '../configuracion/configuracion.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -13,6 +14,7 @@ export class CajaService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfiguracionService,
+    private readonly backup: BackupService,
   ) {}
 
   /** La caja abierta (solo hay una caja en la tienda) o null. */
@@ -133,7 +135,11 @@ export class CajaService {
         },
       });
       return c.id;
-    }).then((id) => this.detalle(id));
+    }).then((id) => {
+      // Backup al cerrar caja, sin hacer esperar al cajero.
+      void this.backup.hacer('cierre de caja');
+      return this.detalle(id);
+    });
   }
 
   historial() {

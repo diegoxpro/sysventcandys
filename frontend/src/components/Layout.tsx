@@ -40,6 +40,7 @@ export default function Layout() {
           <Enlace to="/venta" icono="venta">Venta</Enlace>
           <Enlace to="/caja" icono="caja">Caja</Enlace>
           <Enlace to="/ventas" icono="compras">Ventas realizadas</Enlace>
+          {esAdmin && <Enlace to="/reportes" icono="reportes">Reportes</Enlace>}
           <div className="nav-group">Almacén</div>
           <Enlace to="/productos" icono="productos">Productos</Enlace>
           <Enlace to="/inventario" icono="inventario">Inventario y mermas</Enlace>

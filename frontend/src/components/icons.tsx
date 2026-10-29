@@ -1,6 +1,7 @@
 /** Íconos SVG en línea (trazo de 1.75, 24×24). Sin dependencias: funcionan sin internet. */
 const TRAZOS = {
   inicio: 'M3 10.5 12 3l9 7.5M5 9v11h5v-6h4v6h5V9',
+  reportes: 'M4 20V11M10 20V4M16 20v-7M21 20H3',
   productos: 'M21 8 12 3 3 8v8l9 5 9-5V8ZM3 8l9 5 9-5M12 13v8',
   inventario: 'M4 4h16v4H4zM5 8v12h14V8M10 12h4',
   compras: 'M3 4h2l2.4 11.2a1 1 0 0 0 1 .8h9.2a1 1 0 0 0 1-.8L21 8H6.2M9 20.5h.01M18 20.5h.01',

@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Patch } from '@nestjs/common';
 import { Rol } from '@prisma/client';
-import { IsBoolean, IsInt, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsNumber, IsOptional, IsString, Matches, Max, Min } from 'class-validator';
 import { Roles } from '../auth/decorators';
 import { ConfiguracionService } from './configuracion.service';
 
@@ -16,6 +16,10 @@ class ActualizarConfiguracionDto {
   @IsOptional() @IsInt() @Min(0) @Max(365) diasAvisoVencimiento?: number;
   @IsOptional() @IsNumber() @Min(0) montoInicialCaja?: number;
   @IsOptional() @IsString() mensajeTicket?: string;
+  @IsOptional() @IsString() backupCarpeta?: string;
+  @IsOptional() @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'Hora en formato HH:MM' }) backupHora?: string;
+  @IsOptional() @IsInt() @Min(1) @Max(365) backupConservar?: number;
+  @IsOptional() @IsString() pgDumpRuta?: string;
 }
 
 @Controller('configuracion')
