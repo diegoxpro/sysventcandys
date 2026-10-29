@@ -19,9 +19,11 @@ Sistema de ventas para minimarket que funciona **sin internet** en la PC de la t
 | Autorización | Descuentos, precios rebajados y anulaciones piden la clave del administrador cuando los hace un cajero. |
 | Caja | Apertura con fondo fijo (S/ 150 por defecto), ingresos y gastos, pagos a proveedores desde la caja, cierre con contador de billetes y monedas, diferencia, ticket de cierre e historial. |
 | Ventas realizadas | Consulta por fecha y comprobante, reimpresión y anulación (devuelve el stock, incluidos los lotes). |
+| Reportes | Ventas resumido (como el de SysVent, agrupado por comprobante), ventas por producto con utilidad y margen, por día, por medio de pago, por cajero, utilidad del período (ventas − costo − mermas − gastos), compras por proveedor y stock valorizado. Descarga en Excel o impresión/PDF. Solo administrador. |
+| Backup | Copia diaria de la base de datos con `pg_dump` a una carpeta de Google Drive para escritorio, más una copia local. También al cerrar caja y con un botón. Conserva los últimos 30. |
 | Configuración | Datos de la tienda, márgenes por defecto, redondeo de precios, permitir venta sin stock, días de aviso de vencimiento, usuarios (administrador y cajeros). |
 
-Siguientes pasos del plan: reportes y backup a Google Drive, y facturación electrónica SUNAT.
+Siguiente paso del plan: facturación electrónica SUNAT.
 
 > Las boletas B001 todavía **no se envían a SUNAT**; eso llega en el paso de facturación electrónica.
 
@@ -54,6 +56,24 @@ El ticket se imprime con la impresora predeterminada de Windows (POS-80C, papel 
 5. Abre http://localhost:5173, ingresa con `admin` / `admin123` y **cambia la contraseña** en Configuración → Mi contraseña.
 
 Para desarrollo usa `npm run dev` en cada carpeta.
+
+## Backup en Google Drive
+
+1. Instala **Google Drive para escritorio** en la PC de la tienda e inicia sesión con tu cuenta.
+2. En el sistema, ve a Configuración → Backup y escribe una carpeta dentro de tu unidad, por ejemplo `G:\Mi unidad\Backups Candys`.
+3. Si `pg_dump` no está en el PATH, indica su ruta (`C:\Program Files\PostgreSQL\16\bin\pg_dump.exe`).
+4. Presiona "Hacer backup ahora" para probar. Drive sube la copia cuando hay internet.
+
+Además, siempre queda una copia local en `backend/backups` (o en la carpeta de la variable `BACKUP_LOCAL`).
+
+**Restaurar un backup** (en una base vacía):
+
+```bash
+createdb -U postgres candys_restaurada
+pg_restore --no-owner -U postgres -d candys_restaurada "G:\Mi unidad\Backups Candys\candys_2026-10-29_2200.backup"
+```
+
+Luego apunta `DATABASE_URL` a `candys_restaurada` y reinicia el backend.
 
 ## Reglas de negocio
 

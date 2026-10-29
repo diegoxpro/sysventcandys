@@ -12,6 +12,7 @@ import Login from './pages/Login';
 import NuevaCompra from './pages/NuevaCompra';
 import Productos from './pages/Productos';
 import Proveedores from './pages/Proveedores';
+import Reportes from './pages/Reportes';
 import Venta from './pages/Venta';
 import Ventas from './pages/Ventas';
 
@@ -32,6 +33,7 @@ export default function App() {
         <Route path="venta" element={<Venta />} />
         <Route path="caja" element={<Caja />} />
         <Route path="ventas" element={<Ventas />} />
+        {esAdmin && <Route path="reportes" element={<Reportes />} />}
         <Route path="productos" element={<Productos />} />
         <Route path="inventario" element={<Inventario />} />
         <Route path="compras" element={<Compras />} />

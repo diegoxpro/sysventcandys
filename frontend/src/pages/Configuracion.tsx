@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { Campo, Modal, useCarga, useToast } from '../components/ui';
-import { n, precioSugerido } from '../format';
-import { Configuracion as Config, Rol, Serie, Usuario } from '../types';
+import { fechaHora, n, precioSugerido } from '../format';
+import { Configuracion as Config, EstadoBackup, Rol, Serie, Usuario } from '../types';
 
 export default function Configuracion() {
   const { esAdmin } = useAuth();
@@ -16,12 +16,14 @@ export default function Configuracion() {
           <button className={tab === 'preferencias' ? 'active' : ''} onClick={() => setTab('preferencias')}>Preferencias</button>
           <button className={tab === 'series' ? 'active' : ''} onClick={() => setTab('series')}>Comprobantes</button>
           <button className={tab === 'usuarios' ? 'active' : ''} onClick={() => setTab('usuarios')}>Usuarios</button>
+          <button className={tab === 'backup' ? 'active' : ''} onClick={() => setTab('backup')}>Backup</button>
           <button className={tab === 'cuenta' ? 'active' : ''} onClick={() => setTab('cuenta')}>Mi contraseña</button>
         </div>
       )}
       {tab === 'preferencias' && <Preferencias />}
       {tab === 'series' && <Series />}
       {tab === 'usuarios' && <Usuarios />}
+      {tab === 'backup' && <Backups />}
       {tab === 'cuenta' && <MiCuenta />}
     </div>
   );
@@ -130,6 +132,108 @@ function Preferencias() {
         </div>
       </div>
       <div><button className="btn btn-primary" onClick={guardar}>Guardar preferencias</button></div>
+    </div>
+  );
+}
+
+function Backups() {
+  const avisar = useToast();
+  const { data: cfg } = useCarga(() => api<Config>('/configuracion'), []);
+  const { data: estado, setData: setEstado } = useCarga(() => api<EstadoBackup>('/backups'), []);
+  const [f, setF] = useState<{ backupCarpeta: string; backupHora: string; backupConservar: string; pgDumpRuta: string } | null>(null);
+  const [haciendo, setHaciendo] = useState(false);
+  useEffect(() => {
+    if (cfg)
+      setF({
+        backupCarpeta: cfg.backupCarpeta ?? '',
+        backupHora: cfg.backupHora,
+        backupConservar: String(cfg.backupConservar),
+        pgDumpRuta: cfg.pgDumpRuta ?? '',
+      });
+  }, [cfg]);
+  if (!f || !estado) return null;
+
+  const guardar = async () => {
+    try {
+      await api('/configuracion', {
+        method: 'PATCH',
+        body: { backupCarpeta: f.backupCarpeta.trim(), backupHora: f.backupHora, backupConservar: Math.round(n(f.backupConservar)), pgDumpRuta: f.pgDumpRuta.trim() },
+      });
+      setEstado(await api<EstadoBackup>('/backups'));
+      avisar('Configuración de backup guardada');
+    } catch (e) {
+      avisar((e as Error).message, true);
+    }
+  };
+
+  const ahora = async () => {
+    setHaciendo(true);
+    try {
+      const r = await api<EstadoBackup>('/backups', { body: {} });
+      setEstado(r);
+      const ultimo = r.historial[0];
+      if (ultimo?.ok) avisar('Backup listo');
+      else avisar(`El backup falló: ${ultimo?.error ?? 'error desconocido'}`, true);
+    } catch (e) {
+      avisar((e as Error).message, true);
+    } finally {
+      setHaciendo(false);
+    }
+  };
+
+  const mb = (b: number | null) => (b == null ? '' : `${(b / 1024 / 1024).toFixed(2)} MB`);
+  return (
+    <div className="stack" style={{ maxWidth: 820 }}>
+      {estado.atrasado ? (
+        <div className="alert warn">No hay un backup correcto en las últimas 48 horas. Revisa la carpeta y presiona "Hacer backup ahora".</div>
+      ) : (
+        <div className="alert info">Último backup correcto: {fechaHora(estado.ultimoOk?.fecha)} ({estado.ultimoOk?.origen}).</div>
+      )}
+      <div className="card card-pad stack">
+        <div>
+          <h2>Copia en Google Drive</h2>
+          <p className="muted small" style={{ margin: '4px 0 0' }}>
+            Instala <b>Google Drive para escritorio</b> en la PC e indica aquí una carpeta dentro de tu unidad, por ejemplo{' '}
+            <span className="mono">G:\Mi unidad\Backups Candys</span>. El sistema guarda ahí la copia y Drive la sube a la nube cuando hay internet.
+          </p>
+        </div>
+        <div className="grid-2">
+          <Campo label="Carpeta de Google Drive" className="span-2" ayuda={`Siempre se guarda además una copia local en ${estado.carpetaLocal}`}>
+            <input className="mono" value={f.backupCarpeta} onChange={(e) => setF({ ...f, backupCarpeta: e.target.value })} placeholder="G:\Mi unidad\Backups Candys" />
+          </Campo>
+          <Campo label="Hora del backup diario" ayuda="Si la PC está apagada a esa hora, se hace al encenderla">
+            <input type="time" value={f.backupHora} onChange={(e) => setF({ ...f, backupHora: e.target.value })} />
+          </Campo>
+          <Campo label="Conservar los últimos" ayuda="Backups; los más antiguos se borran">
+            <input className="num" type="number" min="1" max="365" value={f.backupConservar} onChange={(e) => setF({ ...f, backupConservar: e.target.value })} />
+          </Campo>
+          <Campo label="Ruta de pg_dump (opcional)" className="span-2" ayuda="Déjala vacía si pg_dump está en el PATH">
+            <input className="mono" value={f.pgDumpRuta} onChange={(e) => setF({ ...f, pgDumpRuta: e.target.value })} placeholder="C:\Program Files\PostgreSQL\16\bin\pg_dump.exe" />
+          </Campo>
+        </div>
+        <div className="row">
+          <button className="btn btn-primary" onClick={guardar}>Guardar</button>
+          <button className="btn" onClick={ahora} disabled={haciendo}>{haciendo ? 'Haciendo backup…' : 'Hacer backup ahora'}</button>
+        </div>
+        <p className="small muted" style={{ margin: 0 }}>También se hace un backup automático cada vez que se cierra la caja.</p>
+      </div>
+      <div className="card">
+        <div className="card-head"><h2>Últimos backups</h2></div>
+        <table>
+          <thead><tr><th>Fecha</th><th>Origen</th><th>Resultado</th><th className="num">Tamaño</th></tr></thead>
+          <tbody>
+            {estado.historial.map((b) => (
+              <tr key={b.id}>
+                <td className="small">{fechaHora(b.fecha)}</td>
+                <td>{b.origen}</td>
+                <td>{b.ok ? <span className="badge ok">Correcto</span> : <span className="badge danger" title={b.error ?? ''}>Falló</span>}{!b.ok && <div className="small muted">{b.error}</div>}</td>
+                <td className="num small">{mb(b.tamano)}</td>
+              </tr>
+            ))}
+            {!estado.historial.length && <tr><td colSpan={4} className="muted">Aún no hay backups.</td></tr>}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

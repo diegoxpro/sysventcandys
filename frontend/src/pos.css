@@ -28,3 +28,22 @@
 @media (max-width: 1100px) {
   .pos { grid-template-columns: 1fr; height: auto; }
 }
+
+/* Reportes */
+.reporte-grupo td { background: var(--surface-2); font-weight: 650; }
+.reporte-subtotal td { font-weight: 650; border-bottom: 2px solid var(--border-strong); }
+.reporte-total td { font-weight: 750; background: var(--surface-2); }
+.solo-impresion { display: none; }
+
+@media print {
+  @page { size: A4; margin: 12mm; }
+  body { background: #fff; font-size: 11px; }
+  .app { display: block; }
+  .sidebar, .no-print, .toasts { display: none !important; }
+  .main { padding: 0; }
+  .card { border: 0; }
+  .table-wrap { overflow: visible; max-height: none !important; }
+  th { position: static; }
+  th, td { padding: 4px 6px; }
+  .solo-impresion { display: block; }
+}

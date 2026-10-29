@@ -94,6 +94,12 @@ model Configuracion {
   diasAvisoVencimiento  Int      @default(15)
   montoInicialCaja      Decimal  @default(150) @db.Decimal(12, 2)
   mensajeTicket         String?  @default("¡Gracias por su compra!")
+  // Carpeta sincronizada con Google Drive (Google Drive para escritorio).
+  backupCarpeta         String?
+  backupHora            String   @default("22:00")
+  backupConservar       Int      @default(30)
+  // Ruta de pg_dump; vacío = buscarlo en el PATH.
+  pgDumpRuta            String?
   updatedAt             DateTime @updatedAt
 }
 
@@ -417,4 +423,14 @@ model VentaPago {
   numeroOperacion String?
 
   venta Venta @relation(fields: [ventaId], references: [id])
+}
+
+model Backup {
+  id      Int      @id @default(autoincrement())
+  fecha   DateTime @default(now())
+  archivo String?
+  tamano  Int?
+  ok      Boolean
+  origen  String
+  error   String?
 }
