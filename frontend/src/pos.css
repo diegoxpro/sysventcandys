@@ -1,0 +1,30 @@
+/* Punto de venta, caja y ticket. Usa los tokens de styles.css. */
+.pos { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; height: calc(100vh - 48px); }
+.pos-main { display: flex; flex-direction: column; min-height: 0; }
+.pos-bar { display: flex; gap: 10px; align-items: center; padding: 12px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.pos-bar .search { flex: 1; min-width: 260px; }
+.pos-bar .search input { height: 46px; font-size: 16px; }
+.pos-items { flex: 1; overflow: auto; }
+.pos-items td { padding-top: 7px; padding-bottom: 7px; }
+.pos-items tr.ultimo { background: var(--accent-soft); }
+.pos-side { display: flex; flex-direction: column; gap: 12px; }
+.pos-total { padding: 18px; text-align: right; }
+.pos-total .label { color: var(--text-2); font-size: 13px; }
+.pos-total .monto { font-size: 44px; font-weight: 750; line-height: 1.1; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.pos-side .btn-cobrar { height: 64px; font-size: 20px; font-weight: 700; }
+.segmented { display: inline-flex; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); overflow: hidden; }
+.segmented button { border: 0; background: var(--surface); padding: 0 12px; height: 36px; font: inherit; cursor: pointer; color: var(--text-2); border-right: 1px solid var(--border); }
+.segmented button:last-child { border-right: 0; }
+.segmented button.on { background: var(--text); color: #fff; font-weight: 600; }
+.qty { display: inline-flex; align-items: center; gap: 4px; }
+.qty input { width: 64px; text-align: center; height: 32px; }
+.qty button { width: 28px; height: 28px; padding: 0; }
+.atajos { display: flex; gap: 14px; flex-wrap: wrap; color: var(--text-2); font-size: 12px; padding: 8px 12px; border-top: 1px solid var(--border); }
+.pago-fila { display: grid; grid-template-columns: 120px 1fr 1fr; gap: 8px; align-items: center; }
+.rapidos { display: flex; gap: 6px; flex-wrap: wrap; }
+.vuelto { font-size: 28px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.denominaciones { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 20px; }
+.denominaciones .fila { display: grid; grid-template-columns: 70px 90px 1fr; gap: 10px; align-items: center; }
+@media (max-width: 1100px) {
+  .pos { grid-template-columns: 1fr; height: auto; }
+}

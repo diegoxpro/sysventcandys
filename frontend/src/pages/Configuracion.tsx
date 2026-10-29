@@ -3,7 +3,7 @@ import { api } from '../api';
 import { useAuth } from '../auth';
 import { Campo, Modal, useCarga, useToast } from '../components/ui';
 import { n, precioSugerido } from '../format';
-import { Configuracion as Config, Rol, Usuario } from '../types';
+import { Configuracion as Config, Rol, Serie, Usuario } from '../types';
 
 export default function Configuracion() {
   const { esAdmin } = useAuth();
@@ -14,11 +14,13 @@ export default function Configuracion() {
       {esAdmin && (
         <div className="tabs">
           <button className={tab === 'preferencias' ? 'active' : ''} onClick={() => setTab('preferencias')}>Preferencias</button>
+          <button className={tab === 'series' ? 'active' : ''} onClick={() => setTab('series')}>Comprobantes</button>
           <button className={tab === 'usuarios' ? 'active' : ''} onClick={() => setTab('usuarios')}>Usuarios</button>
           <button className={tab === 'cuenta' ? 'active' : ''} onClick={() => setTab('cuenta')}>Mi contraseña</button>
         </div>
       )}
       {tab === 'preferencias' && <Preferencias />}
+      {tab === 'series' && <Series />}
       {tab === 'usuarios' && <Usuarios />}
       {tab === 'cuenta' && <MiCuenta />}
     </div>
@@ -41,6 +43,8 @@ function Preferencias() {
         margen3: String(n(data.margen3)),
         redondeoPrecio: String(n(data.redondeoPrecio)),
         diasAvisoVencimiento: String(data.diasAvisoVencimiento),
+        montoInicialCaja: String(n(data.montoInicialCaja)),
+        mensajeTicket: data.mensajeTicket ?? '',
       });
   }, [data]);
   if (!data || !('margen1' in f)) return null;
@@ -60,6 +64,8 @@ function Preferencias() {
           margen3: n(f.margen3),
           redondeoPrecio: n(f.redondeoPrecio),
           diasAvisoVencimiento: Math.round(n(f.diasAvisoVencimiento)),
+          montoInicialCaja: n(f.montoInicialCaja),
+          mensajeTicket: String(f.mensajeTicket),
         },
       });
       avisar('Preferencias guardadas');
@@ -112,7 +118,56 @@ function Preferencias() {
           <input className="num" style={{ width: 120 }} type="number" min="0" value={String(f.diasAvisoVencimiento)} onChange={(e) => set('diasAvisoVencimiento', e.target.value)} />
         </Campo>
       </div>
+      <div className="card card-pad stack">
+        <h2>Caja y ticket</h2>
+        <div className="grid-2">
+          <Campo label="Monto inicial de caja" ayuda="Se propone al abrir la caja">
+            <input className="num" type="number" min="0" step="0.1" value={String(f.montoInicialCaja)} onChange={(e) => set('montoInicialCaja', e.target.value)} />
+          </Campo>
+          <Campo label="Mensaje al pie del ticket">
+            <input value={String(f.mensajeTicket)} onChange={(e) => set('mensajeTicket', e.target.value)} />
+          </Campo>
+        </div>
+      </div>
       <div><button className="btn btn-primary" onClick={guardar}>Guardar preferencias</button></div>
+    </div>
+  );
+}
+
+function Series() {
+  const avisar = useToast();
+  const { data, recargar } = useCarga(() => api<Serie[]>('/series'), []);
+  const cambiar = async (s: Serie) => {
+    const v = window.prompt(`Último número emitido en ${s.serie}. La próxima venta usará el siguiente.`, String(s.ultimoNumero));
+    if (v === null || !/^\d+$/.test(v.trim())) return;
+    try {
+      await api(`/series/${s.id}`, { method: 'PATCH', body: { ultimoNumero: Number(v) } });
+      avisar('Numeración actualizada');
+      recargar();
+    } catch (e) {
+      avisar((e as Error).message, true);
+    }
+  };
+  return (
+    <div className="card" style={{ maxWidth: 820 }}>
+      <div className="card-head">
+        <h2>Series de comprobantes</h2>
+        <span className="small muted">Continúa la numeración que traías de SysVent</span>
+      </div>
+      <table>
+        <thead><tr><th>Serie</th><th>Comprobante</th><th className="num">Último emitido</th><th className="num">Siguiente</th><th /></tr></thead>
+        <tbody>
+          {data?.map((s) => (
+            <tr key={s.id}>
+              <td className="mono"><b>{s.serie}</b></td>
+              <td>{s.tipo === 'BOLETA' ? 'Boleta de venta' : 'Boleta libre (no va a SUNAT, se imprime como nota de venta)'}</td>
+              <td className="num mono">{String(s.ultimoNumero).padStart(8, '0')}</td>
+              <td className="num mono">{String(s.ultimoNumero + 1).padStart(8, '0')}</td>
+              <td className="actions"><button className="btn btn-sm" onClick={() => cambiar(s)}>Cambiar</button></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

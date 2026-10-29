@@ -23,6 +23,10 @@ export default function Layout() {
           <NavLink to="/" end>
             Inicio {nAlertas > 0 && <span className="pill">{nAlertas}</span>}
           </NavLink>
+          <div className="nav-group">Ventas</div>
+          <NavLink to="/venta">Venta</NavLink>
+          <NavLink to="/caja">Caja</NavLink>
+          <NavLink to="/ventas">Ventas realizadas</NavLink>
           <div className="nav-group">Almacén</div>
           <NavLink to="/productos">Productos</NavLink>
           <NavLink to="/inventario">Inventario y mermas</NavLink>

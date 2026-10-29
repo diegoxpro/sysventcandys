@@ -14,6 +14,8 @@ class ActualizarConfiguracionDto {
   @IsOptional() @IsNumber() @Min(0) @Max(1000) margen3?: number;
   @IsOptional() @IsNumber() @Min(0) @Max(10) redondeoPrecio?: number;
   @IsOptional() @IsInt() @Min(0) @Max(365) diasAvisoVencimiento?: number;
+  @IsOptional() @IsNumber() @Min(0) montoInicialCaja?: number;
+  @IsOptional() @IsString() mensajeTicket?: string;
 }
 
 @Controller('configuracion')
