@@ -3,6 +3,7 @@ import { useAuth } from './auth';
 import Layout from './components/Layout';
 import Compras from './pages/Compras';
 import CompraDetalle from './pages/CompraDetalle';
+import Caja from './pages/Caja';
 import Configuracion from './pages/Configuracion';
 import CuentasPorPagar from './pages/CuentasPorPagar';
 import Inicio from './pages/Inicio';
@@ -11,6 +12,8 @@ import Login from './pages/Login';
 import NuevaCompra from './pages/NuevaCompra';
 import Productos from './pages/Productos';
 import Proveedores from './pages/Proveedores';
+import Venta from './pages/Venta';
+import Ventas from './pages/Ventas';
 
 export default function App() {
   const { usuario, listo, esAdmin } = useAuth();
@@ -26,6 +29,9 @@ export default function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route index element={<Inicio />} />
+        <Route path="venta" element={<Venta />} />
+        <Route path="caja" element={<Caja />} />
+        <Route path="ventas" element={<Ventas />} />
         <Route path="productos" element={<Productos />} />
         <Route path="inventario" element={<Inventario />} />
         <Route path="compras" element={<Compras />} />

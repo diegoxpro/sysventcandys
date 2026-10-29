@@ -118,6 +118,8 @@ export interface Configuracion {
   margen3: Dec;
   redondeoPrecio: Dec;
   diasAvisoVencimiento: number;
+  montoInicialCaja: Dec;
+  mensajeTicket: string | null;
 }
 
 export interface Movimiento {
@@ -140,4 +142,92 @@ export interface Alertas {
   stockBajo: { id: number; nombre: string; codigoBarra: string | null; stock: Dec; stockMinimo: Dec }[];
   vencidos: Lote[];
   porVencer: Lote[];
+}
+
+export type TipoComprobante = 'BOLETA' | 'BOLETA_LIBRE';
+export const COMPROBANTE_LABEL: Record<TipoComprobante, string> = { BOLETA: 'Boleta', BOLETA_LIBRE: 'Boleta libre' };
+
+export interface Cliente {
+  id: number;
+  tipoDoc: 'DNI' | 'RUC' | 'CE' | 'SIN_DOCUMENTO';
+  numeroDoc: string | null;
+  nombre: string;
+  direccion: string | null;
+}
+
+export interface Serie {
+  id: number;
+  tipo: TipoComprobante;
+  serie: string;
+  ultimoNumero: number;
+  activa: boolean;
+}
+
+export interface Venta {
+  id: number;
+  cajaId: number;
+  tipoComprobante: TipoComprobante;
+  serie: string;
+  numero: number;
+  fecha: string;
+  nivelPrecio: number;
+  subtotal: Dec;
+  descuento: Dec;
+  total: Dec;
+  opExonerada: Dec;
+  opGravada: Dec;
+  opInafecta: Dec;
+  igv: Dec;
+  costoTotal: Dec;
+  efectivoRecibido: Dec | null;
+  vuelto: Dec;
+  estado: 'EMITIDA' | 'ANULADA';
+  motivoAnulacion: string | null;
+  fechaAnulacion: string | null;
+  cliente: Cliente | null;
+  usuario: { nombre: string };
+  autorizadoPor?: { nombre: string } | null;
+  anuladaPor?: { nombre: string } | null;
+  items?: {
+    id: number;
+    descripcion: string;
+    cantidad: Dec;
+    precioUnitario: Dec;
+    descuento: Dec;
+    subtotal: Dec;
+    producto: { codigoBarra: string | null; unidad: string };
+  }[];
+  pagos: { id: number; medioPago: MedioPago; monto: Dec; numeroOperacion: string | null }[];
+}
+
+export interface ResumenCaja {
+  montoInicial: number;
+  totalVentas: number;
+  numeroVentas: number;
+  utilidad: number;
+  porMedio: Record<MedioPago, number>;
+  porComprobante: { tipo: TipoComprobante; cantidad: number; total: number; descuento: number }[];
+  anuladas: { cantidad: number; total: number };
+  ingresos: number;
+  egresos: number;
+  efectivoEsperado: number;
+  conteo?: { denominacion: number; cantidad: number }[];
+  efectivoContado?: number;
+  diferencia?: number;
+}
+
+export interface Caja {
+  id: number;
+  estado: 'ABIERTA' | 'CERRADA';
+  fechaApertura: string;
+  fechaCierre: string | null;
+  montoInicial: Dec;
+  efectivoEsperado: Dec | null;
+  efectivoContado: Dec | null;
+  diferencia: Dec | null;
+  observacion: string | null;
+  usuarioApertura: { nombre: string };
+  usuarioCierre: { nombre: string } | null;
+  movimientos?: { id: number; tipo: 'INGRESO' | 'EGRESO'; concepto: string; monto: Dec; fecha: string; usuario: { nombre: string } }[];
+  resumen?: ResumenCaja;
 }

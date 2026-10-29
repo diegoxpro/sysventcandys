@@ -3,6 +3,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsInt,
@@ -43,6 +44,8 @@ export class PagoDto {
   @IsEnum(MedioPago) medioPago: MedioPago;
   @IsOptional() @IsString() numeroOperacion?: string;
   @IsOptional() @IsString() observacion?: string;
+  /** Pago en efectivo que sale de la caja abierta (queda como egreso de caja). */
+  @IsOptional() @IsBoolean() desdeCaja?: boolean;
 }
 
 export class AnularDto {

@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { CondicionPago, EstadoCompra, MedioPago, Prisma, TipoMovimiento } from '@prisma/client';
 import { precioSugerido } from '../common/precios';
+import { CajaService } from '../caja/caja.service';
 import { ConfiguracionService } from '../configuracion/configuracion.service';
 import { StockService } from '../inventario/stock.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -21,6 +22,7 @@ export class ComprasService {
     private readonly prisma: PrismaService,
     private readonly stock: StockService,
     private readonly config: ConfiguracionService,
+    private readonly caja: CajaService,
   ) {}
 
   listar(f: FiltroCompras) {
@@ -185,6 +187,10 @@ export class ComprasService {
   }
 
   async pagar(id: number, dto: PagoDto, usuarioId: number) {
+    const { desdeCaja, ...pago } = dto;
+    if (desdeCaja && dto.medioPago !== MedioPago.EFECTIVO) {
+      throw new BadRequestException('Solo los pagos en efectivo pueden salir de la caja');
+    }
     return this.prisma.$transaction(async (tx) => {
       const [c] = await tx.$queryRaw<{ saldo: Prisma.Decimal; estado: EstadoCompra }[]>`
         SELECT saldo, estado FROM "Compra" WHERE id = ${id} FOR UPDATE`;
@@ -193,7 +199,25 @@ export class ComprasService {
       if (new Prisma.Decimal(dto.monto).greaterThan(c.saldo)) {
         throw new BadRequestException(`El pago supera el saldo pendiente (S/ ${Number(c.saldo).toFixed(2)})`);
       }
-      await tx.pagoProveedor.create({ data: { compraId: id, usuarioId, ...dto } });
+      const registrado = await tx.pagoProveedor.create({ data: { compraId: id, usuarioId, ...pago } });
+      if (desdeCaja) {
+        const caja = await this.caja.exigirAbierta(tx);
+        const { efectivoEsperado } = await this.caja.resumen(caja.id, tx);
+        if (dto.monto > efectivoEsperado) {
+          throw new BadRequestException(`No hay suficiente efectivo en caja (S/ ${efectivoEsperado.toFixed(2)})`);
+        }
+        const compra = await tx.compra.findUniqueOrThrow({ where: { id }, include: { proveedor: true } });
+        await tx.movimientoCaja.create({
+          data: {
+            cajaId: caja.id,
+            usuarioId,
+            tipo: 'EGRESO',
+            concepto: `Pago a ${compra.proveedor.nombreComercial || compra.proveedor.razonSocial} ${compra.serie}-${compra.numero}`,
+            monto: dto.monto,
+            pagoProveedorId: registrado.id,
+          },
+        });
+      }
       return tx.compra.update({ where: { id }, data: { saldo: { decrement: dto.monto } } });
     });
   }

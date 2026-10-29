@@ -10,13 +10,14 @@ export default function PagoModal({ compra, onClose, onListo }: { compra: Compra
   const [medioPago, setMedio] = useState<MedioPago>('EFECTIVO');
   const [numeroOperacion, setOperacion] = useState('');
   const [observacion, setObs] = useState('');
+  const [desdeCaja, setDesdeCaja] = useState(false);
   const [enviando, setEnviando] = useState(false);
 
   const guardar = async () => {
     setEnviando(true);
     try {
       await api(`/compras/${compra.id}/pagos`, {
-        body: { monto: n(monto), medioPago, numeroOperacion: numeroOperacion.trim() || undefined, observacion: observacion.trim() || undefined },
+        body: { monto: n(monto), medioPago, desdeCaja: medioPago === 'EFECTIVO' && desdeCaja, numeroOperacion: numeroOperacion.trim() || undefined, observacion: observacion.trim() || undefined },
       });
       avisar(`Pago de ${money(monto)} registrado`);
       onListo();
@@ -62,6 +63,12 @@ export default function PagoModal({ compra, onClose, onListo }: { compra: Compra
           <Campo label="Observación" className={medioPago === 'EFECTIVO' ? 'span-2' : ''}>
             <input value={observacion} onChange={(e) => setObs(e.target.value)} />
           </Campo>
+          {medioPago === 'EFECTIVO' && (
+            <label className="check span-2">
+              <input type="checkbox" checked={desdeCaja} onChange={(e) => setDesdeCaja(e.target.checked)} />
+              Sale del efectivo de la caja abierta (se registra como gasto de caja)
+            </label>
+          )}
         </div>
       </div>
     </Modal>
