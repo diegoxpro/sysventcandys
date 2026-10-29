@@ -1,0 +1,249 @@
+import { useState } from 'react';
+import { api } from '../api';
+import { useAuth } from '../auth';
+import { fecha, margenReal, money, n, precioSugerido, qty } from '../format';
+import { Catalogo, Configuracion, Producto } from '../types';
+import { Campo, Modal, useCarga, useToast } from './ui';
+
+const UNIDADES = ['UND', 'BLLA', 'FCO', 'BSA', 'SCH', 'CJA', 'PQT', 'DOC', 'KG', 'LT'];
+
+export default function ProductoForm({ producto, onClose, onGuardado }: { producto?: Producto; onClose: () => void; onGuardado: () => void }) {
+  const avisar = useToast();
+  const { esAdmin } = useAuth();
+  const { data: cfg } = useCarga(() => api<Configuracion>('/configuracion'), []);
+  const { data: categorias, setData: setCategorias } = useCarga(() => api<Catalogo[]>('/categorias'), []);
+  const { data: marcas, setData: setMarcas } = useCarga(() => api<Catalogo[]>('/marcas'), []);
+  const { data: detalle } = useCarga(() => (producto ? api<Producto>(`/productos/${producto.id}`) : Promise.resolve(null)), [producto?.id]);
+
+  const [f, setF] = useState({
+    codigoBarra: producto?.codigoBarra ?? '',
+    nombre: producto?.nombre ?? '',
+    categoriaId: producto?.categoriaId ?? '',
+    marcaId: producto?.marcaId ?? '',
+    unidad: producto?.unidad ?? 'UND',
+    afectacionIgv: producto?.afectacionIgv ?? 'EXONERADO',
+    costo: String(n(producto?.costo)),
+    precio1: String(n(producto?.precio1)),
+    precio2: String(n(producto?.precio2)),
+    precio3: String(n(producto?.precio3)),
+    margen1: producto?.margen1 != null ? String(n(producto.margen1)) : '',
+    margen2: producto?.margen2 != null ? String(n(producto.margen2)) : '',
+    margen3: producto?.margen3 != null ? String(n(producto.margen3)) : '',
+    stockMinimo: String(n(producto?.stockMinimo)),
+    stockInicial: '',
+    controlaVencimiento: producto?.controlaVencimiento ?? false,
+    activo: producto?.activo ?? true,
+  });
+  const [revisado, setRevisado] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const set = (k: keyof typeof f, v: string | boolean) => setF((x) => ({ ...x, [k]: v }));
+
+  const margenDefecto = (i: 1 | 2 | 3) => n(cfg?.[`margen${i}`]);
+  const margenDe = (i: 1 | 2 | 3) => (f[`margen${i}`] !== '' ? n(f[`margen${i}`]) : margenDefecto(i));
+  const calcular = (i: 1 | 2 | 3) => set(`precio${i}`, String(precioSugerido(n(f.costo), margenDe(i), n(cfg?.redondeoPrecio ?? 0.1))));
+
+  const nuevoCatalogo = async (tipo: 'categorias' | 'marcas') => {
+    const nombre = window.prompt(tipo === 'categorias' ? 'Nombre de la nueva categoría' : 'Nombre de la nueva marca');
+    if (!nombre?.trim()) return;
+    const c = await api<Catalogo>(`/${tipo}`, { body: { nombre } });
+    if (tipo === 'categorias') setCategorias((l) => [...(l ?? []).filter((x) => x.id !== c.id), c].sort((a, b) => a.nombre.localeCompare(b.nombre)));
+    else setMarcas((l) => [...(l ?? []).filter((x) => x.id !== c.id), c].sort((a, b) => a.nombre.localeCompare(b.nombre)));
+    set(tipo === 'categorias' ? 'categoriaId' : 'marcaId', String(c.id));
+  };
+
+  const guardar = async () => {
+    setEnviando(true);
+    const optNum = (v: string) => (v === '' ? null : n(v));
+    const body = {
+      codigoBarra: f.codigoBarra.trim() || null,
+      nombre: f.nombre.trim().toUpperCase(),
+      categoriaId: f.categoriaId === '' ? null : Number(f.categoriaId),
+      marcaId: f.marcaId === '' ? null : Number(f.marcaId),
+      unidad: f.unidad,
+      afectacionIgv: f.afectacionIgv,
+      costo: n(f.costo),
+      precio1: n(f.precio1),
+      precio2: n(f.precio2) || n(f.precio1),
+      precio3: n(f.precio3) || n(f.precio1),
+      margen1: optNum(f.margen1),
+      margen2: optNum(f.margen2),
+      margen3: optNum(f.margen3),
+      stockMinimo: n(f.stockMinimo),
+      controlaVencimiento: f.controlaVencimiento,
+      activo: f.activo,
+      ...(producto ? { revisado } : { stockInicial: n(f.stockInicial) || undefined }),
+    };
+    try {
+      await api(producto ? `/productos/${producto.id}` : '/productos', { method: producto ? 'PATCH' : 'POST', body });
+      avisar(producto ? 'Producto actualizado' : 'Producto creado');
+      onGuardado();
+    } catch (e) {
+      avisar((e as Error).message, true);
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  return (
+    <Modal
+      ancho
+      titulo={producto ? (esAdmin ? 'Editar producto' : 'Producto') : 'Nuevo producto'}
+      onClose={onClose}
+      pie={
+        esAdmin && (
+          <>
+            <button className="btn" onClick={onClose}>Cancelar</button>
+            <button className="btn btn-primary" onClick={guardar} disabled={enviando || f.nombre.trim().length < 2 || n(f.precio1) <= 0}>
+              Guardar
+            </button>
+          </>
+        )
+      }
+    >
+      <fieldset disabled={!esAdmin} style={{ border: 0, padding: 0, margin: 0 }} className="stack">
+        {producto?.revisar && (
+          <div className="alert warn">
+            <div className="grow">
+              <b>Revisar:</b> {producto.revisar}
+            </div>
+            <label className="check">
+              <input type="checkbox" checked={revisado} onChange={(e) => setRevisado(e.target.checked)} /> Ya lo revisé
+            </label>
+          </div>
+        )}
+        <div className="grid-3">
+          <Campo label="Código de barras" ayuda="Déjalo vacío si no tiene">
+            <input className="mono" value={f.codigoBarra} onChange={(e) => set('codigoBarra', e.target.value)} autoFocus={!producto} />
+          </Campo>
+          <Campo label="Nombre" className="span-2">
+            <input value={f.nombre} onChange={(e) => set('nombre', e.target.value)} />
+          </Campo>
+          <Campo label="Categoría">
+            <div className="row" style={{ flexWrap: 'nowrap', gap: 6 }}>
+              <select value={f.categoriaId} onChange={(e) => set('categoriaId', e.target.value)}>
+                <option value="">Sin categoría</option>
+                {categorias?.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+              </select>
+              <button type="button" className="btn" title="Nueva categoría" onClick={() => nuevoCatalogo('categorias')}>+</button>
+            </div>
+          </Campo>
+          <Campo label="Marca">
+            <div className="row" style={{ flexWrap: 'nowrap', gap: 6 }}>
+              <select value={f.marcaId} onChange={(e) => set('marcaId', e.target.value)}>
+                <option value="">Sin marca</option>
+                {marcas?.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+              </select>
+              <button type="button" className="btn" title="Nueva marca" onClick={() => nuevoCatalogo('marcas')}>+</button>
+            </div>
+          </Campo>
+          <div className="grid-2" style={{ gap: 12 }}>
+            <Campo label="Unidad">
+              <select value={f.unidad} onChange={(e) => set('unidad', e.target.value)}>
+                {[...new Set([f.unidad, ...UNIDADES])].map((u) => <option key={u}>{u}</option>)}
+              </select>
+            </Campo>
+            <Campo label="IGV">
+              <select value={f.afectacionIgv} onChange={(e) => set('afectacionIgv', e.target.value)}>
+                <option value="EXONERADO">Exonerado</option>
+                <option value="GRAVADO">Gravado</option>
+                <option value="INAFECTO">Inafecto</option>
+              </select>
+            </Campo>
+          </div>
+        </div>
+
+        <div className="card card-pad" style={{ background: 'var(--surface-2)' }}>
+          <div className="row" style={{ marginBottom: 12 }}>
+            <h3 className="grow">Costo y precios</h3>
+            <span className="small muted">Margen vacío = margen general de Configuración</span>
+          </div>
+          <div className="grid-4">
+            <Campo label="Costo (último)">
+              <input className="num" type="number" step="any" min="0" value={f.costo} onChange={(e) => set('costo', e.target.value)} />
+            </Campo>
+            {([1, 2, 3] as const).map((i) => {
+              const real = margenReal(n(f.costo), n(f[`precio${i}`]));
+              return (
+                <div key={i} className="stack" style={{ gap: 6 }}>
+                  <Campo label={`Precio ${i}`} ayuda={real != null ? `Ganancia actual ${real}%` : 'Sin costo registrado'}>
+                    <input className="num" type="number" step="0.01" min="0" value={f[`precio${i}`]} onChange={(e) => set(`precio${i}`, e.target.value)} />
+                  </Campo>
+                  <div className="row" style={{ flexWrap: 'nowrap', gap: 6 }}>
+                    <input
+                      className="num"
+                      style={{ height: 30 }}
+                      type="number"
+                      step="any"
+                      min="0"
+                      placeholder={`${margenDefecto(i)}`}
+                      value={f[`margen${i}`]}
+                      onChange={(e) => set(`margen${i}`, e.target.value)}
+                      aria-label={`Margen ${i} %`}
+                    />
+                    <span className="muted">%</span>
+                    <button type="button" className="btn btn-sm" onClick={() => calcular(i)} disabled={n(f.costo) <= 0} title="Calcular el precio con este margen">
+                      Calcular
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="grid-4">
+          {!producto && (
+            <Campo label="Stock inicial">
+              <input className="num" type="number" step="any" min="0" value={f.stockInicial} onChange={(e) => set('stockInicial', e.target.value)} />
+            </Campo>
+          )}
+          {producto && (
+            <Campo label="Stock actual" ayuda="Se cambia con compras, ventas o ajustes">
+              <input className="num" value={qty(producto.stock)} readOnly tabIndex={-1} />
+            </Campo>
+          )}
+          <Campo label="Stock mínimo" ayuda="Avisa cuando llegue a este número">
+            <input className="num" type="number" step="any" min="0" value={f.stockMinimo} onChange={(e) => set('stockMinimo', e.target.value)} />
+          </Campo>
+          <div className="field" style={{ justifyContent: 'center' }}>
+            <label className="check">
+              <input type="checkbox" checked={f.controlaVencimiento} onChange={(e) => set('controlaVencimiento', e.target.checked)} />
+              Controlar vencimiento
+            </label>
+          </div>
+          <div className="field" style={{ justifyContent: 'center' }}>
+            <label className="check">
+              <input type="checkbox" checked={f.activo} onChange={(e) => set('activo', e.target.checked)} /> Activo
+            </label>
+          </div>
+        </div>
+
+        {detalle?.lotes && detalle.lotes.length > 0 && (
+          <div>
+            <h3 style={{ marginBottom: 8 }}>Lotes con stock</h3>
+            <table className="card">
+              <thead>
+                <tr><th>Lote</th><th>Vence</th><th className="num">Cantidad</th></tr>
+              </thead>
+              <tbody>
+                {detalle.lotes.map((l) => (
+                  <tr key={l.id}>
+                    <td>{l.codigo ?? `#${l.id}`}</td>
+                    <td>{fecha(l.fechaVencimiento)}</td>
+                    <td className="num">{qty(l.cantidad)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {producto && (
+          <div className="small muted">
+            Valor del stock al costo: {money(n(producto.stock) * n(producto.costo))}
+            {producto.codigoAnterior && <> · Id SysVent {producto.codigoAnterior.split(':')[0]}</>}
+          </div>
+        )}
+      </fieldset>
+    </Modal>
+  );
+}

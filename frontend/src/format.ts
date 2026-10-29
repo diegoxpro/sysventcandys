@@ -1,0 +1,42 @@
+const soles = new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN', minimumFractionDigits: 2 });
+const numero = new Intl.NumberFormat('es-PE', { maximumFractionDigits: 3 });
+
+export const n = (v: unknown) => Number(v ?? 0);
+export const money = (v: unknown) => soles.format(n(v));
+export const qty = (v: unknown) => numero.format(n(v));
+
+/** Fechas de columnas DATE llegan como medianoche UTC: se muestran sin desfase. */
+export function fecha(v?: string | null) {
+  if (!v) return '';
+  const [y, m, d] = v.slice(0, 10).split('-');
+  return `${d}/${m}/${y}`;
+}
+
+export function fechaHora(v?: string | null) {
+  if (!v) return '';
+  return new Date(v).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+export function hoyISO() {
+  const d = new Date();
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
+export function diasHasta(v: string) {
+  const [y, m, d] = v.slice(0, 10).split('-').map(Number);
+  const hoy = new Date();
+  const a = Date.UTC(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+  return Math.round((Date.UTC(y, m - 1, d) - a) / 86_400_000);
+}
+
+/** Misma fórmula que el backend: costo * (1 + margen%), redondeado hacia arriba. */
+export function precioSugerido(costo: number, margen: number, redondeo = 0.1) {
+  const base = costo * (1 + margen / 100);
+  if (!redondeo) return Math.round(base * 100) / 100;
+  return Math.round(Math.ceil(base / redondeo - 1e-9) * redondeo * 100) / 100;
+}
+
+export function margenReal(costo: number, precio: number) {
+  if (costo <= 0) return null;
+  return Math.round(((precio - costo) / costo) * 1000) / 10;
+}

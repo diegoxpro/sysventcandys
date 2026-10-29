@@ -1,0 +1,246 @@
+// Base de datos del sistema de ventas Candy's Market.
+// Fase 1: usuarios, configuración, productos, proveedores, compras,
+// cuentas por pagar, lotes/vencimientos, mermas y movimientos de stock.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Rol {
+  ADMIN
+  CAJERO
+}
+
+enum AfectacionIgv {
+  GRAVADO
+  EXONERADO
+  INAFECTO
+}
+
+enum TipoMovimiento {
+  IMPORTACION
+  COMPRA
+  ANULACION_COMPRA
+  VENTA
+  ANULACION_VENTA
+  MERMA
+  AJUSTE
+}
+
+enum TipoDocumentoCompra {
+  FACTURA
+  BOLETA
+  GUIA
+  NOTA_VENTA
+}
+
+enum CondicionPago {
+  CONTADO
+  CREDITO
+}
+
+enum EstadoCompra {
+  REGISTRADA
+  ANULADA
+}
+
+enum MedioPago {
+  EFECTIVO
+  TARJETA
+  YAPE
+  PLIN
+  TRANSFERENCIA
+}
+
+model Usuario {
+  id           Int      @id @default(autoincrement())
+  usuario      String   @unique
+  nombre       String
+  passwordHash String
+  rol          Rol      @default(CAJERO)
+  activo       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  movimientos MovimientoStock[]
+  compras     Compra[]
+  pagos       PagoProveedor[]
+}
+
+// Fila única (id = 1) con los datos de la tienda y las preferencias.
+model Configuracion {
+  id                    Int     @id @default(1)
+  empresaNombre         String  @default("CANDY'S MARKET")
+  empresaRuc            String?
+  empresaDireccion      String?
+  permitirVentaSinStock Boolean @default(false)
+  // Margen de ganancia por defecto (%) sobre el costo para cada precio.
+  margen1               Decimal @default(25) @db.Decimal(6, 2)
+  margen2               Decimal @default(20) @db.Decimal(6, 2)
+  margen3               Decimal @default(15) @db.Decimal(6, 2)
+  // Los precios sugeridos se redondean hacia arriba a este múltiplo (S/ 0.10).
+  redondeoPrecio        Decimal @default(0.10) @db.Decimal(6, 2)
+  diasAvisoVencimiento  Int     @default(15)
+  updatedAt             DateTime @updatedAt
+}
+
+model Categoria {
+  id        Int        @id @default(autoincrement())
+  nombre    String     @unique
+  productos Producto[]
+}
+
+model Marca {
+  id        Int        @id @default(autoincrement())
+  nombre    String     @unique
+  productos Producto[]
+}
+
+model Producto {
+  id                  Int           @id @default(autoincrement())
+  codigoBarra         String?       @unique
+  // Id del producto en SysVent, para trazar la importación.
+  codigoAnterior      String?       @unique
+  nombre              String
+  categoriaId         Int?
+  marcaId             Int?
+  unidad              String        @default("UND")
+  costo               Decimal       @default(0) @db.Decimal(12, 4)
+  precio1             Decimal       @default(0) @db.Decimal(12, 2)
+  precio2             Decimal       @default(0) @db.Decimal(12, 2)
+  precio3             Decimal       @default(0) @db.Decimal(12, 2)
+  // Si es null se usa el margen de la configuración.
+  margen1             Decimal?      @db.Decimal(6, 2)
+  margen2             Decimal?      @db.Decimal(6, 2)
+  margen3             Decimal?      @db.Decimal(6, 2)
+  stock               Decimal       @default(0) @db.Decimal(12, 3)
+  stockMinimo         Decimal       @default(0) @db.Decimal(12, 3)
+  afectacionIgv       AfectacionIgv @default(EXONERADO)
+  controlaVencimiento Boolean       @default(false)
+  activo              Boolean       @default(true)
+  // Marcado al importar cuando el dato necesita revisión (motivo).
+  revisar             String?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  categoria   Categoria?        @relation(fields: [categoriaId], references: [id])
+  marca       Marca?            @relation(fields: [marcaId], references: [id])
+  lotes       Lote[]
+  movimientos MovimientoStock[]
+  compraItems CompraItem[]
+
+  @@index([nombre])
+}
+
+model Lote {
+  id               Int      @id @default(autoincrement())
+  productoId       Int
+  codigo           String?
+  fechaVencimiento DateTime @db.Date
+  cantidad         Decimal  @db.Decimal(12, 3)
+  compraItemId     Int?     @unique
+  createdAt        DateTime @default(now())
+
+  producto    Producto          @relation(fields: [productoId], references: [id])
+  compraItem  CompraItem?       @relation(fields: [compraItemId], references: [id])
+  movimientos MovimientoStock[]
+
+  @@index([fechaVencimiento])
+}
+
+// Cada entrada o salida de stock. Es la base del kardex.
+model MovimientoStock {
+  id              Int            @id @default(autoincrement())
+  productoId      Int
+  loteId          Int?
+  usuarioId       Int?
+  tipo            TipoMovimiento
+  // Positivo entra, negativo sale.
+  cantidad        Decimal        @db.Decimal(12, 3)
+  stockResultante Decimal        @db.Decimal(12, 3)
+  costoUnitario   Decimal        @default(0) @db.Decimal(12, 4)
+  referencia      String?
+  motivo          String?
+  fecha           DateTime       @default(now())
+
+  producto Producto @relation(fields: [productoId], references: [id])
+  lote     Lote?    @relation(fields: [loteId], references: [id])
+  usuario  Usuario? @relation(fields: [usuarioId], references: [id])
+
+  @@index([productoId, fecha])
+  @@index([tipo, fecha])
+}
+
+model Proveedor {
+  id              Int      @id @default(autoincrement())
+  ruc             String?  @unique
+  razonSocial     String
+  nombreComercial String?
+  telefono        String?
+  email           String?
+  direccion       String?
+  contacto        String?
+  activo          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  compras Compra[]
+}
+
+model Compra {
+  id               Int                 @id @default(autoincrement())
+  proveedorId      Int
+  usuarioId        Int
+  tipoDocumento    TipoDocumentoCompra @default(FACTURA)
+  serie            String
+  numero           String
+  fechaEmision     DateTime            @db.Date
+  condicion        CondicionPago       @default(CONTADO)
+  fechaVencimiento DateTime?           @db.Date
+  total            Decimal             @db.Decimal(12, 2)
+  saldo            Decimal             @db.Decimal(12, 2)
+  estado           EstadoCompra        @default(REGISTRADA)
+  observacion      String?
+  createdAt        DateTime            @default(now())
+
+  proveedor Proveedor       @relation(fields: [proveedorId], references: [id])
+  usuario   Usuario         @relation(fields: [usuarioId], references: [id])
+  items     CompraItem[]
+  pagos     PagoProveedor[]
+
+  @@unique([proveedorId, tipoDocumento, serie, numero])
+  @@index([fechaEmision])
+}
+
+model CompraItem {
+  id               Int       @id @default(autoincrement())
+  compraId         Int
+  productoId       Int
+  cantidad         Decimal   @db.Decimal(12, 3)
+  costoUnitario    Decimal   @db.Decimal(12, 4)
+  subtotal         Decimal   @db.Decimal(12, 2)
+  codigoLote       String?
+  fechaVencimiento DateTime? @db.Date
+
+  compra   Compra   @relation(fields: [compraId], references: [id])
+  producto Producto @relation(fields: [productoId], references: [id])
+  lote     Lote?
+}
+
+model PagoProveedor {
+  id              Int       @id @default(autoincrement())
+  compraId        Int
+  usuarioId       Int
+  fecha           DateTime  @default(now())
+  monto           Decimal   @db.Decimal(12, 2)
+  medioPago       MedioPago @default(EFECTIVO)
+  numeroOperacion String?
+  observacion     String?
+
+  compra  Compra  @relation(fields: [compraId], references: [id])
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
+}
