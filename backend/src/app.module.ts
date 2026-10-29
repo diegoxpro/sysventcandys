@@ -13,6 +13,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { ProductosModule } from './productos/productos.module';
 import { ProveedoresModule } from './proveedores/proveedores.module';
 import { ReportesModule } from './reportes/reportes.module';
+import { SunatModule } from './sunat/sunat.module';
 import { UsuariosModule } from './usuarios/usuarios.module';
 import { VentasModule } from './ventas/ventas.module';
 
@@ -31,6 +32,7 @@ import { VentasModule } from './ventas/ventas.module';
     VentasModule,
     ReportesModule,
     BackupModule,
+    SunatModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

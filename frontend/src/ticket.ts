@@ -1,3 +1,4 @@
+import QRCode from 'qrcode';
 import { fechaHora, money, n, qty } from './format';
 import { Caja, COMPROBANTE_LABEL, Configuracion, MEDIO_LABEL, Venta } from './types';
 
@@ -22,22 +23,41 @@ function imprimir(html: string) {
   d.open();
   d.write(`<!doctype html><html><head><meta charset="utf-8"><style>${ESTILO}</style></head><body>${html}</body></html>`);
   d.close();
-  setTimeout(() => {
-    f.contentWindow!.focus();
-    f.contentWindow!.print();
-    setTimeout(() => f.remove(), 1000);
-  }, 50);
+  // Espera a que cargue el QR antes de imprimir.
+  const imagenes = Array.from(d.images).filter((i) => !i.complete);
+  Promise.all(imagenes.map((i) => new Promise((r) => (i.onload = i.onerror = r)))).then(() =>
+    setTimeout(() => {
+      f.contentWindow!.focus();
+      f.contentWindow!.print();
+      setTimeout(() => f.remove(), 1000);
+    }, 50),
+  );
 }
 
 function cabecera(cfg: Configuracion) {
   return `<div class="c b g">${esc(cfg.empresaNombre)}</div>
+    ${cfg.empresaRazonSocial ? `<div class="c">${esc(cfg.empresaRazonSocial)}</div>` : ''}
     ${cfg.empresaRuc ? `<div class="c">RUC ${esc(cfg.empresaRuc)}</div>` : ''}
     ${cfg.empresaDireccion ? `<div class="c">${esc(cfg.empresaDireccion)}</div>` : ''}`;
 }
 
-export function imprimirVenta(v: Venta, cfg: Configuracion) {
+const TIPO_DOC: Record<string, string> = { DNI: '1', RUC: '6', CE: '4' };
+const fechaLocal = (iso: string) => {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+/** Texto del QR que pide SUNAT para la representación impresa. */
+export function textoQr(v: Venta, ruc: string) {
+  const doc = v.cliente?.numeroDoc ? [TIPO_DOC[v.cliente.tipoDoc] ?? '0', v.cliente.numeroDoc] : ['0', '-'];
+  return [ruc, '03', v.serie, v.numero, n(v.igv).toFixed(2), n(v.total).toFixed(2), fechaLocal(v.fecha), ...doc, v.hashCpe].join('|') + '|';
+}
+
+export async function imprimirVenta(v: Venta, cfg: Configuracion) {
+  const electronica = v.tipoComprobante === 'BOLETA' && !!v.hashCpe && !!cfg.empresaRuc;
   // La boleta libre es un documento interno: se imprime como nota de venta.
-  const titulo = v.tipoComprobante === 'BOLETA' ? 'BOLETA DE VENTA' : 'NOTA DE VENTA';
+  const titulo = v.tipoComprobante === 'BOLETA' ? (electronica ? 'BOLETA DE VENTA ELECTRÓNICA' : 'BOLETA DE VENTA') : 'NOTA DE VENTA';
+  const qr = electronica ? await QRCode.toDataURL(textoQr(v, cfg.empresaRuc!), { margin: 0, width: 150, errorCorrectionLevel: 'Q' }) : null;
   const items = (v.items ?? [])
     .map(
       (i) => `<tr><td colspan="3">${esc(i.descripcion)}</td></tr>
@@ -64,6 +84,9 @@ export function imprimirVenta(v: Venta, cfg: Configuracion) {
       ${v.efectivoRecibido ? `<tr><td>Efectivo recibido</td><td class="r">${n(v.efectivoRecibido).toFixed(2)}</td></tr><tr class="b"><td>Vuelto</td><td class="r">${n(v.vuelto).toFixed(2)}</td></tr>` : ''}
     </table>
     ${n(v.opExonerada) > 0 ? '<hr><div class="c">Bienes transferidos en la Amazonía Región Selva para ser consumidos en la misma</div>' : ''}
+    ${qr ? `<hr><div class="c"><img src="${qr}" style="width:30mm;height:30mm"></div>
+      <div class="c" style="font-size:10px">Hash: ${esc(v.hashCpe)}</div>
+      <div class="c" style="font-size:10px">Representación impresa de la Boleta de Venta Electrónica. Consulte su documento en www.sunat.gob.pe</div>` : ''}
     ${cfg.mensajeTicket ? `<hr><div class="c">${esc(cfg.mensajeTicket)}</div>` : ''}`);
 }
 

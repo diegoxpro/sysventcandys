@@ -124,6 +124,35 @@ export interface Configuracion {
   backupHora: string;
   backupConservar: number;
   pgDumpRuta: string | null;
+  empresaRazonSocial: string | null;
+  empresaUbigeo: string | null;
+  empresaDepartamento: string | null;
+  empresaProvincia: string | null;
+  empresaDistrito: string | null;
+  codigoEstablecimiento: string;
+  sunatModo: 'DESACTIVADO' | 'BETA' | 'PRODUCCION';
+}
+
+export type EstadoSunat = 'NO_APLICA' | 'PENDIENTE' | 'ACEPTADO' | 'OBSERVADO' | 'RECHAZADO' | 'BAJA_PENDIENTE' | 'BAJA_ENVIADA' | 'BAJA_ACEPTADA';
+export const SUNAT_LABEL: Record<EstadoSunat, { texto: string; clase: string }> = {
+  NO_APLICA: { texto: 'No aplica', clase: '' },
+  PENDIENTE: { texto: 'Por enviar', clase: 'warn' },
+  ACEPTADO: { texto: 'Aceptada', clase: 'ok' },
+  OBSERVADO: { texto: 'Aceptada con obs.', clase: 'ok' },
+  RECHAZADO: { texto: 'Rechazada', clase: 'danger' },
+  BAJA_PENDIENTE: { texto: 'Baja por enviar', clase: 'warn' },
+  BAJA_ENVIADA: { texto: 'Baja enviada', clase: 'info' },
+  BAJA_ACEPTADA: { texto: 'Baja aceptada', clase: '' },
+};
+
+export interface EstadoSunatGeneral {
+  modo: Configuracion['sunatModo'];
+  certificado: { sujeto: string; emisor: string; venceEl: string } | null;
+  errorCertificado: string | null;
+  solConfigurado: boolean;
+  solUsuario: string | null;
+  conteo: Partial<Record<EstadoSunat, number>>;
+  atrasadas: number;
 }
 
 export interface Backup {
@@ -207,6 +236,12 @@ export interface Venta {
   vuelto: Dec;
   estado: 'EMITIDA' | 'ANULADA';
   motivoAnulacion: string | null;
+  estadoSunat: EstadoSunat;
+  hashCpe: string | null;
+  cdrCodigo: string | null;
+  cdrMensaje: string | null;
+  sunatError: string | null;
+  sunatEnviadoEn: string | null;
   fechaAnulacion: string | null;
   cliente: Cliente | null;
   usuario: { nombre: string };

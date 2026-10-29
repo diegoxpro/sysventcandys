@@ -21,11 +21,8 @@ Sistema de ventas para minimarket que funciona **sin internet** en la PC de la t
 | Ventas realizadas | Consulta por fecha y comprobante, reimpresión y anulación (devuelve el stock, incluidos los lotes). |
 | Reportes | Ventas resumido (como el de SysVent, agrupado por comprobante), ventas por producto con utilidad y margen, por día, por medio de pago, por cajero, utilidad del período (ventas − costo − mermas − gastos), compras por proveedor y stock valorizado. Descarga en Excel o impresión/PDF. Solo administrador. |
 | Backup | Copia diaria de la base de datos con `pg_dump` a una carpeta de Google Drive para escritorio, más una copia local. También al cerrar caja y con un botón. Conserva los últimos 30. |
-| Configuración | Datos de la tienda, márgenes por defecto, redondeo de precios, permitir venta sin stock, días de aviso de vencimiento, usuarios (administrador y cajeros). |
-
-Siguiente paso del plan: facturación electrónica SUNAT.
-
-> Las boletas B001 todavía **no se envían a SUNAT**; eso llega en el paso de facturación electrónica.
+| Facturación electrónica | Las boletas B001 se firman con tu certificado digital y se envían directo a SUNAT (SEE del contribuyente). Sin internet quedan "por enviar" y se reintenta solo cada 2 minutos. Las anulaciones van en el resumen diario. Ticket con QR, hash y leyenda de la Amazonía. Las boletas libres (L001) nunca se envían. |
+| Configuración | Datos de la tienda, márgenes por defecto, redondeo de precios, permitir venta sin stock, días de aviso de vencimiento, usuarios (administrador y cajeros), SUNAT. |
 
 ## Ticketera y gaveta
 
@@ -74,6 +71,27 @@ pg_restore --no-owner -U postgres -d candys_restaurada "G:\Mi unidad\Backups Can
 ```
 
 Luego apunta `DATABASE_URL` a `candys_restaurada` y reinicia el backend.
+
+## Facturación electrónica SUNAT
+
+El sistema envía las boletas directamente a SUNAT, firmadas con tu certificado digital. No necesitas OSE.
+
+1. **Certificado.** En Configuración → SUNAT elige tu archivo `.pfx`, escribe su contraseña y presiona "Cargar certificado". Se guarda solo en `backend/secretos` (o en la carpeta de la variable `SECRETOS_DIR`). **No** va a la base de datos ni a los backups, así que guarda el `.pfx` original en un lugar seguro. El certificado también debe estar registrado en SUNAT Operaciones en Línea.
+2. **Datos del emisor.** Revisa RUC, razón social, dirección fiscal, ubigeo (Tarapoto: 220901) y código de establecimiento (0000 para el domicilio fiscal). Guarda.
+3. **Prueba en beta.** Presiona "Probar con SUNAT beta". Firma una boleta de S/ 1.00 y la envía al entorno de pruebas de SUNAT, que usa el usuario `MODDATOS`. Debe responder "ha sido aceptada".
+4. **Usuario SOL secundario.** En SUNAT Operaciones en Línea crea un usuario secundario con el perfil de envío de comprobantes electrónicos y escríbelo en la misma pestaña (sin el RUC). La clave queda en `backend/secretos`.
+5. **Producción.** Cambia el modo a "Producción" y guarda. Desde ese momento cada boleta B001 se envía al emitirla.
+
+Qué pasa en el día a día:
+
+- **Sin internet:** la boleta se imprime igual, con su QR y hash, y queda "Por enviar". El sistema reintenta cada 2 minutos. En Ventas también está el botón "Enviar pendientes a SUNAT".
+- **Rechazada:** el detalle de la venta muestra el código y el mensaje de SUNAT. El administrador puede corregir y "Reenviar a SUNAT", o anular y emitir otra.
+- **Anulación** de una boleta aceptada: se informa a SUNAT en el resumen diario de bajas, que se envía solo. El estado pasa a "Baja aceptada".
+- **Aviso:** si una boleta lleva más de 2 días sin ser aceptada, aparece una alerta en Inicio.
+- Las boletas de **S/ 700 o más** exigen el DNI u otro documento del cliente.
+- Cada boleta guarda su XML firmado, que se puede descargar desde el detalle de la venta.
+
+Variables opcionales: `SUNAT_URL` (otro servicio, por ejemplo uno de pruebas), `SUNAT_AUTOMATICO=0` (apaga el envío automático), `SECRETOS_DIR`.
 
 ## Reglas de negocio
 

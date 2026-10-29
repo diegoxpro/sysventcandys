@@ -44,3 +44,12 @@ export function qs(params: Record<string, string | number | boolean | undefined 
   const t = s.toString();
   return t ? `?${t}` : '';
 }
+
+/** Descarga un archivo de la API (con la sesión) y lo guarda con ese nombre. */
+export async function descargar(ruta: string, nombre: string) {
+  const res = await fetch(`/api${ruta}`, { headers: { authorization: `Bearer ${sesion.token()}` } });
+  if (!res.ok) throw new ApiError('No se pudo descargar el archivo', res.status);
+  const url = URL.createObjectURL(await res.blob());
+  Object.assign(document.createElement('a'), { href: url, download: nombre }).click();
+  URL.revokeObjectURL(url);
+}

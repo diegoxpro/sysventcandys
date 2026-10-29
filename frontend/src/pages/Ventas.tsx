@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { api, qs } from '../api';
+import { api, descargar, qs } from '../api';
+import { useAuth } from '../auth';
 import { useAutorizacion } from '../autorizacion';
 import { Campo, Modal, useCarga, useToast, Vacio } from '../components/ui';
 import { fechaHora, hoyISO, money, n, qty } from '../format';
 import { correlativo, imprimirVenta } from '../ticket';
-import { COMPROBANTE_LABEL, Configuracion, MEDIO_LABEL, Venta } from '../types';
+import { COMPROBANTE_LABEL, Configuracion, EstadoSunatGeneral, MEDIO_LABEL, SUNAT_LABEL, Venta } from '../types';
 
 export default function Ventas() {
   const [desde, setDesde] = useState(hoyISO());
@@ -13,6 +14,24 @@ export default function Ventas() {
   const { data, cargando, recargar } = useCarga(() => api<Venta[]>(`/ventas${qs({ desde, hasta, tipo })}`), [desde, hasta, tipo]);
   const { data: cfg } = useCarga(() => api<Configuracion>('/configuracion'), []);
   const [viendo, setViendo] = useState<number | null>(null);
+  const avisar = useToast();
+  const [enviando, setEnviando] = useState(false);
+  const sunatActivo = cfg && cfg.sunatModo !== 'DESACTIVADO';
+  const porEnviar = data?.filter((v) => v.estadoSunat === 'PENDIENTE' || v.estadoSunat === 'BAJA_PENDIENTE').length ?? 0;
+
+  const enviarPendientes = async () => {
+    setEnviando(true);
+    try {
+      const e = await api<EstadoSunatGeneral>('/sunat/enviar', { method: 'POST' });
+      const quedan = (e.conteo.PENDIENTE ?? 0) + (e.conteo.BAJA_PENDIENTE ?? 0);
+      avisar(quedan ? `Quedan ${quedan} por enviar. Revisa la conexión a internet.` : 'Todo enviado a SUNAT', quedan > 0);
+      recargar();
+    } catch (err) {
+      avisar((err as Error).message, true);
+    } finally {
+      setEnviando(false);
+    }
+  };
 
   const emitidas = data?.filter((v) => v.estado === 'EMITIDA') ?? [];
   const total = emitidas.reduce((s, v) => s + n(v.total), 0);
@@ -24,6 +43,11 @@ export default function Ventas() {
           <h1>Ventas</h1>
           <p>Consulta, reimprime o anula comprobantes.</p>
         </div>
+        {sunatActivo && (
+          <button className="btn" onClick={enviarPendientes} disabled={enviando}>
+            {enviando ? 'Enviando…' : 'Enviar pendientes a SUNAT'}
+          </button>
+        )}
       </div>
       <div className="card">
         <div className="card-head" style={{ alignItems: 'end' }}>
@@ -43,7 +67,7 @@ export default function Ventas() {
         <div className="table-wrap">
           <table>
             <thead>
-              <tr><th>Fecha</th><th>Comprobante</th><th>Cliente</th><th>Cajero</th><th>Pago</th><th className="num">Total</th></tr>
+              <tr><th>Fecha</th><th>Comprobante</th><th>Cliente</th><th>Cajero</th><th>Pago</th>{sunatActivo && <th>SUNAT</th>}<th className="num">Total</th></tr>
             </thead>
             <tbody>
               {data?.map((v) => (
@@ -56,6 +80,7 @@ export default function Ventas() {
                   <td>{v.cliente?.nombre ?? 'Público general'}</td>
                   <td>{v.usuario.nombre}</td>
                   <td className="small">{v.pagos.map((p) => MEDIO_LABEL[p.medioPago]).join(' + ')}</td>
+                  {sunatActivo && <td><EstadoSunatBadge v={v} /></td>}
                   <td className="num">{money(v.total)}</td>
                 </tr>
               ))}
@@ -63,17 +88,44 @@ export default function Ventas() {
           </table>
           {!cargando && !data?.length && <Vacio>No hay ventas en estas fechas.</Vacio>}
         </div>
+        {sunatActivo && porEnviar > 0 && (
+          <div className="pager"><span>{porEnviar} comprobantes de estas fechas esperan envío a SUNAT. Se reintenta solo cada 2 minutos.</span></div>
+        )}
       </div>
       {viendo && cfg && <DetalleVenta id={viendo} cfg={cfg} onClose={() => setViendo(null)} onCambio={recargar} />}
     </div>
   );
 }
 
+function EstadoSunatBadge({ v }: { v: Venta }) {
+  if (v.estadoSunat === 'NO_APLICA') return <span className="faint">—</span>;
+  const e = SUNAT_LABEL[v.estadoSunat];
+  return <span className={`badge ${e.clase}`}>{e.texto}</span>;
+}
+
 function DetalleVenta({ id, cfg, onClose, onCambio }: { id: number; cfg: Configuracion; onClose: () => void; onCambio: () => void }) {
   const avisar = useToast();
   const autorizar = useAutorizacion();
-  const { data: v, setData } = useCarga(() => api<Venta>(`/ventas/${id}`), [id]);
+  const { esAdmin } = useAuth();
+  const { data: v, setData, recargar } = useCarga(() => api<Venta>(`/ventas/${id}`), [id]);
+  const [reenviando, setReenviando] = useState(false);
   if (!v) return null;
+
+  const reenviar = async () => {
+    setReenviando(true);
+    try {
+      await api(`/sunat/ventas/${v.id}/reenviar`, { method: 'POST' });
+      recargar();
+      onCambio();
+    } catch (e) {
+      avisar((e as Error).message, true);
+    } finally {
+      setReenviando(false);
+    }
+  };
+
+  const verXml = () =>
+    descargar(`/sunat/ventas/${v.id}/xml`, `${cfg.empresaRuc ?? 'RUC'}-03-${correlativo(v)}.xml`).catch((e) => avisar((e as Error).message, true));
 
   const anular = async () => {
     const motivo = window.prompt('Motivo de la anulación (el stock regresa al almacén)');
@@ -100,13 +152,28 @@ function DetalleVenta({ id, cfg, onClose, onCambio }: { id: number; cfg: Configu
         <>
           {v.estado === 'EMITIDA' && <button className="btn btn-danger" onClick={anular}>Anular</button>}
           <span className="grow" />
-          <button className="btn" onClick={() => imprimirVenta(v, cfg)}>Reimprimir</button>
+          {v.hashCpe && <button className="btn" onClick={verXml}>Descargar XML</button>}
+          {esAdmin && (v.estadoSunat === 'PENDIENTE' || v.estadoSunat === 'RECHAZADO') && (
+            <button className="btn" onClick={reenviar} disabled={reenviando}>{reenviando ? 'Enviando…' : 'Reenviar a SUNAT'}</button>
+          )}
+          <button className="btn" onClick={() => void imprimirVenta(v, cfg)}>Reimprimir</button>
         </>
       }
     >
       <div className="stack">
         {v.estado === 'ANULADA' && (
           <div className="alert danger">Anulada el {fechaHora(v.fechaAnulacion)} por {v.anuladaPor?.nombre}: {v.motivoAnulacion}</div>
+        )}
+        {v.estadoSunat !== 'NO_APLICA' && (
+          <div className={`alert ${v.estadoSunat === 'RECHAZADO' ? 'danger' : v.estadoSunat === 'PENDIENTE' || v.estadoSunat === 'BAJA_PENDIENTE' ? 'warn' : 'info'}`}>
+            <div>
+            <b>SUNAT: {SUNAT_LABEL[v.estadoSunat].texto}</b>
+            {v.cdrMensaje && <> · {v.cdrCodigo && v.cdrCodigo !== '0' && <span className="mono">{v.cdrCodigo}</span>} {v.cdrMensaje}</>}
+            {v.sunatError && !v.cdrMensaje && <div className="small">{v.sunatError}</div>}
+            {v.sunatEnviadoEn && <div className="small muted">Enviado el {fechaHora(v.sunatEnviadoEn)}</div>}
+            {v.estadoSunat === 'RECHAZADO' && <div className="small">Corrige el dato que indica SUNAT (por ejemplo, el documento del cliente) y reenvía, o anula la venta y emite una nueva.</div>}
+            </div>
+          </div>
         )}
         <div className="row small muted" style={{ gap: 16 }}>
           <span>{fechaHora(v.fecha)}</span>
