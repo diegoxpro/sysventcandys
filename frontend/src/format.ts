@@ -40,3 +40,7 @@ export function margenReal(costo: number, precio: number) {
   if (costo <= 0) return null;
   return Math.round(((precio - costo) / costo) * 1000) / 10;
 }
+
+const importe = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+/** Monto sin "S/": para columnas cuya cabecera ya dice la moneda. */
+export const monto = (v: unknown) => importe.format(n(v));
