@@ -4,8 +4,11 @@ import { BackupService } from '../backup/backup.service';
 import { ConfiguracionService } from '../configuracion/configuracion.service';
 import { PrismaService } from '../prisma/prisma.service';
 
-/** Billetes y monedas en soles para el contador del cierre. */
-export const DENOMINACIONES = [200, 100, 50, 20, 10, 5, 2, 1, 0.5, 0.2, 0.1];
+/** Billetes y monedas en soles para el contador del cierre, de menor a mayor. */
+export const DENOMINACIONES = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200];
+
+/** Medios que no son efectivo: al cerrar se confirman con la app o el voucher del POS. */
+const MEDIOS_DIGITALES = Object.values(MedioPago).filter((m) => m !== MedioPago.EFECTIVO);
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -42,15 +45,23 @@ export class CajaService {
     return this.detalle(c.id);
   }
 
-  async movimiento(usuarioId: number, tipo: TipoMovimientoCaja, concepto: string, monto: number) {
+  async movimiento(usuarioId: number, tipo: TipoMovimientoCaja, concepto: string | undefined, monto: number, medioPago?: MedioPago) {
     const c = await this.exigirAbierta();
+    concepto = concepto?.trim() ?? '';
+    if (tipo === TipoMovimientoCaja.VENTA_SIN_COMPROBANTE) {
+      medioPago ??= MedioPago.EFECTIVO;
+      concepto ||= 'Venta sin comprobante';
+    } else {
+      medioPago = undefined;
+      if (concepto.length < 3) throw new BadRequestException('Escribe el concepto (mínimo 3 letras)');
+    }
     if (tipo === TipoMovimientoCaja.EGRESO) {
       const { efectivoEsperado } = await this.resumen(c.id);
       if (monto > efectivoEsperado) {
         throw new BadRequestException(`No hay suficiente efectivo en caja (S/ ${efectivoEsperado.toFixed(2)})`);
       }
     }
-    await this.prisma.movimientoCaja.create({ data: { cajaId: c.id, usuarioId, tipo, concepto, monto } });
+    await this.prisma.movimientoCaja.create({ data: { cajaId: c.id, usuarioId, tipo, concepto, monto, medioPago } });
     return this.detalle(c.id);
   }
 
@@ -70,13 +81,29 @@ export class CajaService {
         _count: true,
       }),
       tx.venta.aggregate({ where: { cajaId, estado: EstadoVenta.ANULADA }, _sum: { total: true }, _count: true }),
-      tx.movimientoCaja.groupBy({ by: ['tipo'], where: { cajaId }, _sum: { monto: true } }),
+      tx.movimientoCaja.findMany({ where: { cajaId }, select: { tipo: true, monto: true, medioPago: true, pagoProveedorId: true } }),
     ]);
 
-    const porMedio = Object.fromEntries(Object.values(MedioPago).map((m) => [m, 0])) as Record<MedioPago, number>;
+    const ceros = () => Object.fromEntries(Object.values(MedioPago).map((m) => [m, 0])) as Record<MedioPago, number>;
+    const porMedio = ceros();
     pagos.forEach((p) => (porMedio[p.medioPago] = r2(Number(p._sum.monto ?? 0))));
-    const ingresos = Number(movs.find((m) => m.tipo === 'INGRESO')?._sum.monto ?? 0);
-    const egresos = Number(movs.find((m) => m.tipo === 'EGRESO')?._sum.monto ?? 0);
+    let ingresos = 0;
+    let gastos = 0;
+    let pagosProveedor = 0;
+    const sinComprobante = ceros();
+    for (const m of movs) {
+      const monto = Number(m.monto);
+      if (m.tipo === TipoMovimientoCaja.INGRESO) ingresos += monto;
+      else if (m.tipo === TipoMovimientoCaja.VENTA_SIN_COMPROBANTE) sinComprobante[m.medioPago ?? MedioPago.EFECTIVO] += monto;
+      else if (m.pagoProveedorId) pagosProveedor += monto;
+      else gastos += monto;
+    }
+    Object.values(MedioPago).forEach((m) => (sinComprobante[m] = r2(sinComprobante[m])));
+    const egresos = gastos + pagosProveedor;
+    const totalSinComprobante = r2(Object.values(sinComprobante).reduce((s, v) => s + v, 0));
+    // Lo que entró por cada medio: ventas del sistema más ventas sin comprobante.
+    const totalPorMedio = ceros();
+    Object.values(MedioPago).forEach((m) => (totalPorMedio[m] = r2(porMedio[m] + sinComprobante[m])));
     const totalVentas = r2(porTipo.reduce((s, t) => s + Number(t._sum.total ?? 0), 0));
     const costo = r2(porTipo.reduce((s, t) => s + Number(t._sum.costoTotal ?? 0), 0));
 
@@ -93,9 +120,14 @@ export class CajaService {
         descuento: Number(t._sum.descuento ?? 0),
       })),
       anuladas: { cantidad: anuladas._count, total: Number(anuladas._sum.total ?? 0) },
+      sinComprobante: { porMedio: sinComprobante, total: totalSinComprobante },
+      totalPorMedio,
       ingresos: r2(ingresos),
+      gastos: r2(gastos),
+      pagosProveedor: r2(pagosProveedor),
       egresos: r2(egresos),
-      efectivoEsperado: r2(Number(caja.montoInicial) + porMedio.EFECTIVO + ingresos - egresos),
+      // Total de efectivo que debe haber en caja.
+      efectivoEsperado: r2(Number(caja.montoInicial) + totalPorMedio.EFECTIVO + ingresos - egresos),
     };
   }
 
@@ -114,13 +146,33 @@ export class CajaService {
     return { ...caja, resumen };
   }
 
-  async cerrar(usuarioId: number, conteo: Record<string, number>, observacion?: string) {
+  /**
+   * Cierra la caja solo si cuadra: el conteo de billetes debe igualar el efectivo en caja y
+   * cada medio digital con movimiento debe igualar lo que dice su app o voucher.
+   */
+  async cerrar(usuarioId: number, conteo: Record<string, number>, digital: Record<string, number> = {}, observacion?: string) {
     return this.prisma.$transaction(async (tx) => {
       const c = await this.exigirAbierta(tx);
       const resumen = await this.resumen(c.id, tx);
       const detalle = DENOMINACIONES.map((d) => ({ denominacion: d, cantidad: Math.max(0, Math.floor(Number(conteo[String(d)] ?? 0))) }));
       const contado = r2(detalle.reduce((s, x) => s + x.denominacion * x.cantidad, 0));
       const diferencia = r2(contado - resumen.efectivoEsperado);
+      const confirmado = MEDIOS_DIGITALES.map((m) => ({
+        medio: m,
+        sistema: resumen.totalPorMedio[m],
+        confirmado: digital[m] == null ? (resumen.totalPorMedio[m] ? null : 0) : r2(Number(digital[m])),
+      }));
+
+      const errores: string[] = [];
+      if (Math.abs(diferencia) >= 0.005) {
+        errores.push(`el efectivo no cuadra (${diferencia < 0 ? 'falta' : 'sobra'} S/ ${Math.abs(diferencia).toFixed(2)})`);
+      }
+      for (const d of confirmado) {
+        if (d.confirmado == null) errores.push(`falta confirmar ${d.medio.toLowerCase()}`);
+        else if (Math.abs(d.confirmado - d.sistema) >= 0.005) errores.push(`${d.medio.toLowerCase()} no cuadra`);
+      }
+      if (errores.length) throw new BadRequestException(`La caja no está cuadrada: ${errores.join(', ')}`);
+
       await tx.caja.update({
         where: { id: c.id },
         data: {
@@ -131,7 +183,7 @@ export class CajaService {
           efectivoContado: contado,
           diferencia,
           observacion,
-          resumenCierre: { ...resumen, conteo: detalle, efectivoContado: contado, diferencia } as Prisma.InputJsonValue,
+          resumenCierre: { ...resumen, conteo: detalle, digital: confirmado, efectivoContado: contado, diferencia } as Prisma.InputJsonValue,
         },
       });
       return c.id;

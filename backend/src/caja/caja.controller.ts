@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, ParseIntPipe, Post } from '@nestjs/common';
-import { TipoMovimientoCaja } from '@prisma/client';
-import { IsEnum, IsNumber, IsObject, IsOptional, IsPositive, IsString, Min, MinLength } from 'class-validator';
+import { MedioPago, TipoMovimientoCaja } from '@prisma/client';
+import { IsEnum, IsNumber, IsObject, IsOptional, IsPositive, IsString, Min } from 'class-validator';
 import { UsuarioActual, UsuarioSesion } from '../auth/decorators';
 import { CajaService, DENOMINACIONES } from './caja.service';
 
@@ -10,13 +10,17 @@ class AbrirDto {
 
 class MovimientoDto {
   @IsEnum(TipoMovimientoCaja) tipo: TipoMovimientoCaja;
-  @IsString() @MinLength(3) concepto: string;
+  @IsOptional() @IsString() concepto?: string;
   @IsNumber() @IsPositive() monto: number;
+  /** Solo para ventas sin comprobante; por defecto efectivo. */
+  @IsOptional() @IsEnum(MedioPago) medioPago?: MedioPago;
 }
 
 class CerrarDto {
   /** Cantidad de billetes/monedas por denominación: { "200": 1, "0.5": 4 }. */
   @IsObject() conteo: Record<string, number>;
+  /** Total que muestra la app o el voucher de cada medio digital: { "YAPE": 45.5 }. */
+  @IsOptional() @IsObject() digital?: Record<string, number>;
   @IsOptional() @IsString() observacion?: string;
 }
 
@@ -51,11 +55,11 @@ export class CajaController {
 
   @Post('movimientos')
   movimiento(@Body() dto: MovimientoDto, @UsuarioActual() u: UsuarioSesion) {
-    return this.caja.movimiento(u.id, dto.tipo, dto.concepto, dto.monto);
+    return this.caja.movimiento(u.id, dto.tipo, dto.concepto, dto.monto, dto.medioPago);
   }
 
   @Post('cerrar')
   cerrar(@Body() dto: CerrarDto, @UsuarioActual() u: UsuarioSesion) {
-    return this.caja.cerrar(u.id, dto.conteo, dto.observacion);
+    return this.caja.cerrar(u.id, dto.conteo, dto.digital, dto.observacion);
   }
 }

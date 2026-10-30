@@ -98,18 +98,22 @@ export function imprimirCierre(c: Caja, cfg: Configuracion) {
     <div>Apertura: ${esc(fechaHora(c.fechaApertura))} (${esc(c.usuarioApertura.nombre)})</div>
     <div>Cierre: ${esc(fechaHora(c.fechaCierre))} (${esc(c.usuarioCierre?.nombre)})</div><hr>
     <table>
-      ${fila('Monto inicial', n(r.montoInicial).toFixed(2))}
       ${r.porComprobante.map((p) => fila(`${COMPROBANTE_LABEL[p.tipo]} (${p.cantidad})`, p.total.toFixed(2))).join('')}
       ${fila('<b>Total ventas</b>', `<b>${r.totalVentas.toFixed(2)}</b>`)}
       ${r.anuladas.cantidad ? fila(`Anuladas (${r.anuladas.cantidad})`, r.anuladas.total.toFixed(2)) : ''}
-    </table><hr><table>
-      ${Object.entries(r.porMedio).filter(([, v]) => v > 0).map(([m, v]) => fila(MEDIO_LABEL[m as keyof typeof MEDIO_LABEL], v.toFixed(2))).join('')}
-      ${fila('Ingresos de caja', r.ingresos.toFixed(2))}
-      ${fila('Egresos de caja', `-${r.egresos.toFixed(2)}`)}
-    </table><hr><table>
-      ${fila('<b>Efectivo esperado</b>', `<b>${r.efectivoEsperado.toFixed(2)}</b>`)}
+      ${r.sinComprobante?.total ? fila('Ventas sin comprobante', r.sinComprobante.total.toFixed(2)) : ''}
+    </table><hr><div class="b">EFECTIVO</div><table>
+      ${fila('Efectivo inicial', n(r.montoInicial).toFixed(2))}
+      ${fila('Ventas en efectivo', n(r.porMedio.EFECTIVO).toFixed(2))}
+      ${r.sinComprobante ? fila('Ventas sin comprob.', n(r.sinComprobante.porMedio.EFECTIVO).toFixed(2)) : ''}
+      ${fila('Otros ingresos', r.ingresos.toFixed(2))}
+      ${fila('Gastos y retiros', `-${n(r.gastos ?? r.egresos).toFixed(2)}`)}
+      ${r.pagosProveedor != null ? fila('Pagos a proveedores', `-${r.pagosProveedor.toFixed(2)}`) : ''}
+      ${fila('<b>Total efectivo en caja</b>', `<b>${r.efectivoEsperado.toFixed(2)}</b>`)}
       ${fila('<b>Efectivo contado</b>', `<b>${n(r.efectivoContado).toFixed(2)}</b>`)}
       ${fila('<b>Diferencia</b>', `<b>${n(r.diferencia).toFixed(2)}</b>`)}
+    </table><hr><div class="b">DIGITAL</div><table>
+      ${Object.entries(r.totalPorMedio ?? r.porMedio).filter(([m, v]) => m !== 'EFECTIVO' && v > 0).map(([m, v]) => fila(MEDIO_LABEL[m as keyof typeof MEDIO_LABEL], v.toFixed(2))).join('') || fila('Sin ventas digitales', '0.00')}
     </table><hr><table>
       ${(r.conteo ?? []).filter((x) => x.cantidad > 0).map((x) => fila(`${x.cantidad} x S/ ${x.denominacion.toFixed(2)}`, (x.cantidad * x.denominacion).toFixed(2))).join('')}
     </table>

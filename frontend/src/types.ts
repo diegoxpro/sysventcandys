@@ -267,13 +267,22 @@ export interface ResumenCaja {
   porMedio: Record<MedioPago, number>;
   porComprobante: { tipo: TipoComprobante; cantidad: number; total: number; descuento: number }[];
   anuladas: { cantidad: number; total: number };
+  // Los cierres anteriores a las ventas sin comprobante no traen estos campos.
+  sinComprobante?: { porMedio: Record<MedioPago, number>; total: number };
+  totalPorMedio?: Record<MedioPago, number>;
   ingresos: number;
+  gastos?: number;
+  pagosProveedor?: number;
   egresos: number;
+  /** Total de efectivo que debe haber en caja. */
   efectivoEsperado: number;
   conteo?: { denominacion: number; cantidad: number }[];
+  digital?: { medio: MedioPago; sistema: number; confirmado: number | null }[];
   efectivoContado?: number;
   diferencia?: number;
 }
+
+export type TipoMovimientoCaja = 'INGRESO' | 'EGRESO' | 'VENTA_SIN_COMPROBANTE';
 
 export interface Caja {
   id: number;
@@ -287,6 +296,14 @@ export interface Caja {
   observacion: string | null;
   usuarioApertura: { nombre: string };
   usuarioCierre: { nombre: string } | null;
-  movimientos?: { id: number; tipo: 'INGRESO' | 'EGRESO'; concepto: string; monto: Dec; fecha: string; usuario: { nombre: string } }[];
+  movimientos?: {
+    id: number;
+    tipo: TipoMovimientoCaja;
+    concepto: string;
+    monto: Dec;
+    medioPago: MedioPago | null;
+    fecha: string;
+    usuario: { nombre: string };
+  }[];
   resumen?: ResumenCaja;
 }
