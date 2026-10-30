@@ -257,6 +257,8 @@ export interface Venta {
     producto: { codigoBarra: string | null; unidad: string };
   }[];
   pagos: { id: number; medioPago: MedioPago; monto: Dec; numeroOperacion: string | null }[];
+  caja?: { estado: 'ABIERTA' | 'CERRADA' };
+  ediciones?: { id: number; fecha: string; detalle: string; usuario: { nombre: string } }[];
 }
 
 export interface ResumenCaja {

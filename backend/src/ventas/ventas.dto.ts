@@ -47,3 +47,13 @@ export class AnularVentaDto {
   @IsString() @MinLength(3) motivo: string;
   @IsOptional() @ValidateNested() @Type(() => AutorizacionDto) autorizacion?: AutorizacionDto;
 }
+
+/** Corrección de una venta que aún no llegó a SUNAT. Solo se envía lo que cambia. */
+export class EditarVentaDto {
+  @IsOptional() @IsEnum(TipoComprobante) tipoComprobante?: TipoComprobante;
+  /** null pasa la venta a "Público general". */
+  @IsOptional() @IsInt() clienteId?: number | null;
+  @IsOptional() @IsArray() @ArrayMinSize(1) @ValidateNested({ each: true }) @Type(() => VentaPagoDto)
+  pagos?: VentaPagoDto[];
+  @IsOptional() @ValidateNested() @Type(() => AutorizacionDto) autorizacion?: AutorizacionDto;
+}

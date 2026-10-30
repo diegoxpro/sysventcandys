@@ -21,6 +21,8 @@ export class SunatService implements OnModuleInit, OnModuleDestroy {
   private readonly log = new Logger('SUNAT');
   private reloj?: NodeJS.Timeout;
   private procesando: Promise<unknown> | null = null;
+  // Correcciones de ventas en curso: mientras haya alguna, la cola no envía.
+  private pausas = 0;
   private cert: Certificado | null = null;
 
   constructor(
@@ -293,6 +295,7 @@ export class SunatService implements OnModuleInit, OnModuleDestroy {
 
   /** Envía lo pendiente. Lo llama el reloj cada 2 minutos y el botón "Enviar ahora". */
   procesar() {
+    if (this.pausas) return Promise.resolve();
     this.procesando ??= this.procesarCola()
       .catch((e) => this.log.warn((e as Error).message))
       .finally(() => (this.procesando = null));
@@ -313,6 +316,20 @@ export class SunatService implements OnModuleInit, OnModuleDestroy {
     }
     await this.enviarBajas();
     await this.consultarTickets();
+  }
+
+  /**
+   * Ejecuta `fn` con la cola de envíos detenida, para corregir una boleta sin que
+   * salga a SUNAT a medio cambiar. Si había un envío en curso, primero espera que termine.
+   */
+  async sinEnvios<T>(fn: () => Promise<T>): Promise<T> {
+    this.pausas++;
+    try {
+      await this.procesando;
+      return await fn();
+    } finally {
+      this.pausas--;
+    }
   }
 
   /** Prueba de punta a punta con el entorno beta de SUNAT. */
