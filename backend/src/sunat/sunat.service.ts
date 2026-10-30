@@ -13,7 +13,7 @@ export const DIAS_AVISO_PENDIENTE = 2;
 
 const ventaXml = {
   cliente: true,
-  items: { include: { producto: { select: { codigoBarra: true, id: true } } } },
+  items: { include: { producto: { select: { codigoBarra: true, id: true } }, presentacion: { select: { codigoBarra: true } } } },
 } satisfies Prisma.VentaInclude;
 
 @Injectable()
@@ -146,7 +146,7 @@ export class SunatService implements OnModuleInit, OnModuleDestroy {
         cliente: v.cliente,
         descuento: Number(v.descuento),
         items: v.items.map((i) => ({
-          codigo: i.producto.codigoBarra ?? String(i.producto.id),
+          codigo: i.presentacion?.codigoBarra ?? i.producto.codigoBarra ?? String(i.producto.id),
           descripcion: i.descripcion,
           cantidad: Number(i.cantidad),
           precioUnitario: Number(i.precioUnitario),

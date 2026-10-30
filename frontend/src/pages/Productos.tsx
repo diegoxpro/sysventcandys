@@ -4,7 +4,7 @@ import { api, qs } from '../api';
 import { useAuth } from '../auth';
 import ProductoForm from '../components/ProductoForm';
 import { Kbd, useAtajos, useCarga, useDebounce, Vacio } from '../components/ui';
-import { monto, n, qty } from '../format';
+import { equivalencia, monto, n, qty } from '../format';
 import { Producto } from '../types';
 
 const FILTROS = [
@@ -107,12 +107,14 @@ export default function Productos() {
                         {p.categoria && <span className="badge">{p.categoria.nombre}</span>}
                         {p.controlaVencimiento && <span className="badge info">Vence</span>}
                         {p.revisar && <span className="badge warn">Revisar</span>}
+                        {p.presentaciones?.map((x) => <span key={x.id} className="badge info">{x.nombre} · {monto(x.precio1)}</span>)}
                       </div>
                     </td>
                     <td className="muted">{p.unidad}</td>
                     <td className="num">
                       {/* Rojo o ámbar solo si el producto tiene mínimo definido; si no, un cero gris. */}
                       <span className={bajo ? (n(p.stock) <= 0 ? 'badge danger' : 'badge warn') : n(p.stock) <= 0 ? 'muted' : ''}>{qty(p.stock)}</span>
+                      {equivalencia(p.stock, p.presentaciones) && <div className="small muted">{equivalencia(p.stock, p.presentaciones)}</div>}
                     </td>
                     <td className="num muted">{n(p.costo) > 0 ? monto(p.costo) : '—'}</td>
                     <td className="num"><b>{monto(p.precio1)}</b></td>

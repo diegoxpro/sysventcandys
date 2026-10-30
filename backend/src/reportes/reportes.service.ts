@@ -111,7 +111,7 @@ export class ReportesService {
   private async ventasPorProducto(f: Filtro): Promise<Reporte> {
     const rows = await this.prisma.$queryRaw<{ codigo: string | null; producto: string; cantidad: number; importe: number; costo: number }[]>`
       SELECT p."codigoBarra" AS codigo, p.nombre AS producto,
-             SUM(i.cantidad)::float AS cantidad, SUM(i.subtotal)::float AS importe,
+             SUM(i.cantidad * i.factor)::float AS cantidad, SUM(i.subtotal)::float AS importe,
              SUM(i.cantidad * i."costoUnitario")::float AS costo
       FROM "VentaItem" i JOIN "Venta" v ON v.id = i."ventaId" JOIN "Producto" p ON p.id = i."productoId"
       WHERE v.estado = 'EMITIDA' AND v.fecha >= ${f.desde} AND v.fecha < ${f.hasta}
@@ -127,7 +127,7 @@ export class ReportesService {
       columnas: [
         { clave: 'codigo', titulo: 'Código' },
         { clave: 'producto', titulo: 'Producto' },
-        { clave: 'cantidad', titulo: 'Cantidad', tipo: 'numero' },
+        { clave: 'cantidad', titulo: 'Unidades', tipo: 'numero' },
         { clave: 'importe', titulo: 'Importe', tipo: 'moneda' },
         { clave: 'costo', titulo: 'Costo', tipo: 'moneda' },
         { clave: 'utilidad', titulo: 'Utilidad', tipo: 'moneda' },

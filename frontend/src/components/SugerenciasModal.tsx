@@ -25,7 +25,7 @@ export default function SugerenciasModal({ sugerencias, onClose }: { sugerencias
   const aplicar = async () => {
     const items = filas
       .filter((f) => f.aplicar)
-      .map((f) => ({ productoId: f.productoId, precio1: Number(f.nuevos[0]), precio2: Number(f.nuevos[1]), precio3: Number(f.nuevos[2]) }));
+      .map((f) => ({ productoId: f.productoId, presentacionId: f.presentacionId ?? undefined, precio1: Number(f.nuevos[0]), precio2: Number(f.nuevos[1]), precio3: Number(f.nuevos[2]) }));
     if (!items.length) return onClose();
     setEnviando(true);
     try {
@@ -56,6 +56,7 @@ export default function SugerenciasModal({ sugerencias, onClose }: { sugerencias
     >
       <p className="muted" style={{ marginTop: 0 }}>
         El costo cambió en estos productos. Los precios sugeridos aplican tu margen a cada precio. Puedes editar cualquier precio antes de guardar.
+        {filas.some((f) => f.presentacionId) && ' Las cajetillas, paquetes y cajas aparecen aparte, con el costo de todas sus unidades.'}
       </p>
       <div className="table-wrap">
         <table>
@@ -69,7 +70,7 @@ export default function SugerenciasModal({ sugerencias, onClose }: { sugerencias
           </thead>
           <tbody>
             {filas.map((f, i) => (
-              <tr key={f.productoId}>
+              <tr key={`${f.productoId}-${f.presentacionId ?? 0}`}>
                 <td>
                   <input type="checkbox" checked={f.aplicar} onChange={(e) => setFilas((x) => x.map((r, j) => (j === i ? { ...r, aplicar: e.target.checked } : r)))} />
                 </td>

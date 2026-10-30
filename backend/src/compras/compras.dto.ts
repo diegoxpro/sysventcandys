@@ -18,6 +18,8 @@ import {
 
 export class CompraItemDto {
   @IsInt() productoId: number;
+  /** Si viene, cantidad y costo son de esa presentación (caja, paquete…) y entran cantidad × factor unidades. */
+  @IsOptional() @IsInt() presentacionId?: number;
   @IsNumber() @IsPositive() cantidad: number;
   @IsNumber() @Min(0) costoUnitario: number;
   @IsOptional() @IsString() codigoLote?: string;

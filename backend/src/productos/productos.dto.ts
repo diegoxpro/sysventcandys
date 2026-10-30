@@ -8,11 +8,24 @@ import {
   IsInt,
   IsNumber,
   IsOptional,
+  IsPositive,
   IsString,
   Min,
   MinLength,
   ValidateNested,
 } from 'class-validator';
+
+export class PresentacionDto {
+  /** Sin id se crea; con id se actualiza. */
+  @IsOptional() @IsInt() id?: number;
+  @IsString() @MinLength(1) nombre: string;
+  /** Unidades del producto que trae (cajetilla x20 = 20). */
+  @IsNumber() @IsPositive() factor: number;
+  @IsOptional() @IsString() codigoBarra?: string | null;
+  @IsNumber() @Min(0) precio1: number;
+  @IsOptional() @IsNumber() @Min(0) precio2?: number;
+  @IsOptional() @IsNumber() @Min(0) precio3?: number;
+}
 
 export class ProductoDto {
   @IsOptional() @IsString() codigoBarra?: string | null;
@@ -31,6 +44,9 @@ export class ProductoDto {
   @IsOptional() @IsEnum(AfectacionIgv) afectacionIgv?: AfectacionIgv;
   @IsOptional() @IsBoolean() controlaVencimiento?: boolean;
   @IsOptional() @IsBoolean() activo?: boolean;
+  /** Lista completa: las que no vengan se desactivan. */
+  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => PresentacionDto)
+  presentaciones?: PresentacionDto[];
 }
 
 export class CrearProductoDto extends ProductoDto {
@@ -46,6 +62,8 @@ export class EditarProductoDto extends ProductoDto {
 
 export class PrecioItemDto {
   @IsInt() productoId: number;
+  /** Si viene, los precios son de esa presentación. */
+  @IsOptional() @IsInt() presentacionId?: number;
   @IsOptional() @IsNumber() @Min(0) precio1?: number;
   @IsOptional() @IsNumber() @Min(0) precio2?: number;
   @IsOptional() @IsNumber() @Min(0) precio3?: number;

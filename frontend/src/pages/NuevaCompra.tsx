@@ -6,11 +6,13 @@ import BuscadorProducto from '../components/BuscadorProducto';
 import ProveedorForm from '../components/ProveedorForm';
 import SugerenciasModal from '../components/SugerenciasModal';
 import { Campo, Kbd, useAtajos, useCarga, useToast, Vacio } from '../components/ui';
-import { hoyISO, money, n } from '../format';
-import { Compra, DOC_LABEL, MEDIO_LABEL, MEDIOS, MedioPago, Producto, Proveedor, Sugerencia, TipoDoc } from '../types';
+import { hoyISO, money, n, qty } from '../format';
+import { Compra, DOC_LABEL, MEDIO_LABEL, MEDIOS, MedioPago, Presentacion, Producto, Proveedor, Sugerencia, TipoDoc } from '../types';
 
 interface Linea {
   producto: Producto;
+  /** Si se compra por caja, paquete…; cantidad y costo son de esa presentación. */
+  presentacion?: Presentacion | null;
   cantidad: string;
   costo: string;
   codigoLote: string;
@@ -76,11 +78,13 @@ export default function NuevaCompra() {
     setRecuperado(false);
   };
 
-  const agregar = (p: Producto) => {
+  const agregar = (p: Producto, presentacion: Presentacion | null = null) => {
     setLineas((ls) => {
-      const i = ls.findIndex((l) => l.producto.id === p.id && !p.controlaVencimiento);
+      const i = ls.findIndex((l) => l.producto.id === p.id && (l.presentacion?.id ?? 0) === (presentacion?.id ?? 0) && !p.controlaVencimiento);
       if (i >= 0) return ls.map((l, j) => (j === i ? { ...l, cantidad: String(n(l.cantidad) + 1) } : l));
-      return [...ls, { producto: p, cantidad: '1', costo: n(p.costo) > 0 ? String(n(p.costo)) : '', codigoLote: '', fechaVencimiento: '' }];
+      // El costo guardado es por unidad; para una caja se propone costo × factor.
+      const costo = Math.round(n(p.costo) * n(presentacion?.factor ?? 1) * 10000) / 10000;
+      return [...ls, { producto: p, presentacion, cantidad: '1', costo: costo > 0 ? String(costo) : '', codigoLote: '', fechaVencimiento: '' }];
     });
   };
   const setL = (i: number, k: keyof Linea, v: string) => setLineas((ls) => ls.map((l, j) => (j === i ? { ...l, [k]: v } : l)));
@@ -114,6 +118,7 @@ export default function NuevaCompra() {
           observacion: cab.observacion.trim() || undefined,
           items: lineas.map((l) => ({
             productoId: l.producto.id,
+            presentacionId: l.presentacion?.id,
             cantidad: n(l.cantidad),
             costoUnitario: n(l.costo),
             codigoLote: l.codigoLote.trim() || undefined,
@@ -201,7 +206,7 @@ export default function NuevaCompra() {
       <div className="card">
         <div className="card-head">
           <div className="grow" style={{ maxWidth: 520 }}>
-            <BuscadorProducto ref={buscador} onElegir={agregar} />
+            <BuscadorProducto ref={buscador} onElegir={agregar} conPresentaciones />
           </div>
           <span className="small muted">Enter agrega el producto. Repetir el código suma 1.</span>
         </div>
@@ -222,9 +227,17 @@ export default function NuevaCompra() {
                 <tr key={i}>
                   <td>
                     {l.producto.nombre}
+                    {l.presentacion && <span className="badge info" style={{ marginLeft: 6 }}>{l.presentacion.nombre} · {qty(l.presentacion.factor)} und</span>}
                     <div className="small muted">
-                      <span className="mono">{l.producto.codigoBarra ?? 'sin código'}</span> · costo anterior {n(l.producto.costo) > 0 ? money(l.producto.costo) : '—'}
+                      <span className="mono">{(l.presentacion ? l.presentacion.codigoBarra : l.producto.codigoBarra) ?? 'sin código'}</span> · costo anterior{' '}
+                      {n(l.producto.costo) > 0 ? `${money(l.producto.costo)} c/u` : '—'}
                     </div>
+                    {l.presentacion && n(l.cantidad) > 0 && (
+                      <div className="small muted">
+                        Entran {qty(n(l.cantidad) * n(l.presentacion.factor))} und
+                        {l.costo !== '' && <> a {money(n(l.costo) / n(l.presentacion.factor))} c/u</>}
+                      </div>
+                    )}
                   </td>
                   <td><input className="num" type="number" min="0" step="any" value={l.cantidad} onChange={(e) => setL(i, 'cantidad', e.target.value)} /></td>
                   <td><input className="num" type="number" min="0" step="any" value={l.costo} onChange={(e) => setL(i, 'costo', e.target.value)} placeholder="0.00" /></td>
