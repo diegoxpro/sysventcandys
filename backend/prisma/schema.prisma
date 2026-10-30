@@ -318,6 +318,8 @@ enum EstadoCaja {
 enum TipoMovimientoCaja {
   INGRESO
   EGRESO
+  // Venta anotada a mano en caja, sin boleta ni ticket del sistema.
+  VENTA_SIN_COMPROBANTE
 }
 
 enum TipoDocIdentidad {
@@ -378,6 +380,8 @@ model MovimientoCaja {
   tipo            TipoMovimientoCaja
   concepto        String
   monto           Decimal            @db.Decimal(12, 2)
+  // Solo en ventas sin comprobante: con qué se cobró.
+  medioPago       MedioPago?
   fecha           DateTime           @default(now())
   // Si el egreso pagó una factura de proveedor.
   pagoProveedorId Int?               @unique
