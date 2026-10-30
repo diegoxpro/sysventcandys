@@ -5,6 +5,7 @@ import { useAuth } from '../auth';
 import { Campo, useCarga, Vacio } from '../components/ui';
 import { fecha, money, n } from '../format';
 import { Compra, DOC_LABEL, Proveedor } from '../types';
+import { hayBorradorCompra } from './NuevaCompra';
 
 function primerDiaMes() {
   const d = new Date();
@@ -30,7 +31,11 @@ export default function Compras() {
           <h1>Compras</h1>
           <p>Cada compra suma stock y actualiza el costo de los productos.</p>
         </div>
-        {esAdmin && <Link className="btn btn-primary" to="/compras/nueva">Registrar compra</Link>}
+        {esAdmin && (
+          <Link className="btn btn-primary" to="/compras/nueva">
+            {hayBorradorCompra() ? 'Continuar compra en borrador' : 'Registrar compra'}
+          </Link>
+        )}
       </div>
       <div className="card">
         <div className="card-head" style={{ alignItems: 'end' }}>

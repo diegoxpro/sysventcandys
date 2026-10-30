@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useAutorizacion } from '../autorizacion';
+import { BORRADOR_VENTA, guardarBorrador, leerBorrador } from '../borrador';
 import BuscadorProducto from '../components/BuscadorProducto';
 import ClienteModal from '../components/ClienteModal';
 import CobroModal, { PagoVenta } from '../components/CobroModal';
@@ -24,20 +25,17 @@ interface Borrador {
   nivel: 1 | 2 | 3;
   cliente: Cliente | null;
   descuento: number;
+  /** Pagos escritos en el cobro sin confirmar, con el total cobrado; si existen, el cobro se reabre al volver. */
+  cobro?: { total: number; pagos: PagoVenta[] };
 }
 
-const CLAVE = 'candys.venta';
 // Cada venta empieza en boleta libre y precio 1.
 const vacio: Borrador = { lineas: [], tipo: 'BOLETA_LIBRE', nivel: 1, cliente: null, descuento: 0 };
 
-function leerBorrador(): Borrador {
-  try {
-    const guardado: Partial<Borrador> = JSON.parse(localStorage.getItem(CLAVE) ?? '{}');
-    // Solo se recupera una venta que tenía productos; si no, se parte de lo predeterminado.
-    return guardado.lineas?.length ? { ...vacio, ...guardado } : vacio;
-  } catch {
-    return vacio;
-  }
+function recuperarVenta(): Borrador {
+  const guardado = leerBorrador<Borrador>(BORRADOR_VENTA);
+  // Solo se recupera una venta que tenía productos o cliente; si no, se parte de lo predeterminado.
+  return guardado?.lineas?.length || guardado?.cliente ? { ...vacio, lineas: [], ...guardado } : vacio;
 }
 
 const r2 = (x: number) => Math.round(x * 100) / 100;
@@ -50,21 +48,24 @@ export default function Venta() {
   const { data: cfg } = useCarga(() => api<Configuracion>('/configuracion'), []);
   const { data: series, recargar: recargarSeries } = useCarga(() => api<Serie[]>('/series'), []);
 
-  const [b, setB] = useState<Borrador>(leerBorrador);
+  const [b, setB] = useState<Borrador>(recuperarVenta);
   const [ultimo, setUltimo] = useState<number | null>(null);
-  const [cobrando, setCobrando] = useState(false);
+  const [cobrando, setCobrando] = useState(() => !!b.cobro && b.lineas.length > 0);
   const [enviando, setEnviando] = useState(false);
   const [eligiendoCliente, setEligiendoCliente] = useState(false);
   const [ventaPrevia, setVentaPrevia] = useState<TVenta | null>(null);
 
-  // La venta en curso sobrevive a un refresco accidental de la página.
+  // La venta en curso sobrevive a cambiar de módulo, recargar o cerrar la pestaña.
+  useEffect(() => guardarBorrador(BORRADOR_VENTA, b), [b]);
+
+  // Al recuperar una venta se traen precio y stock actuales de sus productos.
   useEffect(() => {
-    try {
-      localStorage.setItem(CLAVE, JSON.stringify(b));
-    } catch {
-      /* sin almacenamiento */
-    }
-  }, [b]);
+    if (!b.lineas.length) return;
+    Promise.all(b.lineas.map((l) => api<Producto>(`/productos/${l.producto.id}`).catch(() => null))).then((ps) =>
+      setB((x) => ({ ...x, lineas: x.lineas.map((l) => ({ ...l, producto: ps.find((p) => p?.id === l.producto.id) ?? l.producto })) })),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const precioDe = (l: Linea) => l.precioManual ?? n(l.producto[`precio${b.nivel}`]);
   const importe = (l: Linea) => r2(l.cantidad * precioDe(l) - l.descuento);
@@ -311,7 +312,18 @@ export default function Venta() {
         </div>
       </div>
 
-      {cobrando && <CobroModal total={total} enviando={enviando} onClose={() => (setCobrando(false), enfocar())} onConfirmar={cobrar} />}
+      {cobrando && (
+        <CobroModal
+          total={total}
+          enviando={enviando}
+          // Si el total cambió (por ejemplo, subió un precio) el cobro empieza de cero.
+          key={total}
+          inicial={b.cobro?.total === total ? b.cobro.pagos : undefined}
+          onCambio={(pagos) => set({ cobro: { total, pagos } })}
+          onClose={() => (setCobrando(false), set({ cobro: undefined }), enfocar())}
+          onConfirmar={cobrar}
+        />
+      )}
       {eligiendoCliente && (
         <ClienteModal
           onClose={() => (setEligiendoCliente(false), enfocar())}
