@@ -20,14 +20,29 @@ export default function CobroModal({
   enviando,
   onClose,
   onConfirmar,
+  inicial,
+  titulo,
 }: {
   total: number;
   enviando: boolean;
   onClose: () => void;
   onConfirmar: (pagos: PagoVenta[], imprimir: boolean) => void;
+  /** Pagos con los que se abre el modal, al corregir una venta ya hecha. */
+  inicial?: PagoVenta[];
+  titulo?: string;
 }) {
-  const [efectivo, setEfectivo] = useState('');
-  const [otros, setOtros] = useState<Record<string, { monto: string; op: string }>>(Object.fromEntries(OTROS.map((m) => [m, { monto: '', op: '' }])));
+  const [efectivo, setEfectivo] = useState(() => {
+    const e = inicial?.filter((p) => p.medioPago === 'EFECTIVO').reduce((s, p) => s + p.monto, 0) ?? 0;
+    return inicial && (e > 0 || inicial.some((p) => p.medioPago !== 'EFECTIVO')) ? String(r2(e)) : '';
+  });
+  const [otros, setOtros] = useState<Record<string, { monto: string; op: string }>>(() =>
+    Object.fromEntries(
+      OTROS.map((m) => {
+        const p = inicial?.find((x) => x.medioPago === m);
+        return [m, { monto: p ? String(p.monto) : '', op: p?.numeroOperacion ?? '' }];
+      }),
+    ),
+  );
   const [imprimir, setImprimir] = useState(() => {
     try {
       return localStorage.getItem('candys.imprimir') !== '0';
@@ -94,7 +109,7 @@ export default function CobroModal({
 
   return (
     <Modal
-      titulo={`Cobrar ${money(total)}`}
+      titulo={titulo ?? `Cobrar ${money(total)}`}
       onClose={onClose}
       pie={
         <>

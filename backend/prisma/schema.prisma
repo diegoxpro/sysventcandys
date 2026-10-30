@@ -72,6 +72,7 @@ model Usuario {
   pagos             PagoProveedor[]
   ventas            Venta[]           @relation("VentaUsuario")
   ventasAnuladas    Venta[]           @relation("VentaAnulador")
+  edicionesVenta    VentaEdicion[]
   ventasAutorizadas Venta[]           @relation("VentaAutorizador")
   cajasAbiertas     Caja[]            @relation("CajaApertura")
   cajasCerradas     Caja[]            @relation("CajaCierre")
@@ -439,6 +440,7 @@ model Venta {
   items         VentaItem[]
   pagos         VentaPago[]
   movimientos   MovimientoStock[]
+  ediciones     VentaEdicion[]
   resumenBaja   ResumenDiario?    @relation(fields: [resumenBajaId], references: [id])
 
   @@unique([serie, numero])
@@ -461,6 +463,21 @@ model VentaItem {
 
   venta    Venta    @relation(fields: [ventaId], references: [id])
   producto Producto @relation(fields: [productoId], references: [id])
+}
+
+// Correcciones de una venta ya emitida (comprobante, cliente o pago), autorizadas por un administrador.
+model VentaEdicion {
+  id        Int      @id @default(autoincrement())
+  ventaId   Int
+  usuarioId Int
+  fecha     DateTime @default(now())
+  // Qué cambió, por ejemplo "Comprobante: B001-00000001 → L001-00000003".
+  detalle   String
+
+  venta   Venta   @relation(fields: [ventaId], references: [id])
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
+
+  @@index([ventaId])
 }
 
 model VentaPago {

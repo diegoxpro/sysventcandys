@@ -1,7 +1,7 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query } from '@nestjs/common';
 import { EstadoVenta, TipoComprobante } from '@prisma/client';
 import { UsuarioActual, UsuarioSesion } from '../auth/decorators';
-import { AnularVentaDto, CrearVentaDto } from './ventas.dto';
+import { AnularVentaDto, CrearVentaDto, EditarVentaDto } from './ventas.dto';
 import { VentasService } from './ventas.service';
 
 @Controller('ventas')
@@ -27,6 +27,11 @@ export class VentasController {
   @Post()
   crear(@Body() dto: CrearVentaDto, @UsuarioActual() u: UsuarioSesion) {
     return this.ventas.crear(dto, u);
+  }
+
+  @Patch(':id')
+  editar(@Param('id', ParseIntPipe) id: number, @Body() dto: EditarVentaDto, @UsuarioActual() u: UsuarioSesion) {
+    return this.ventas.editar(id, dto, u);
   }
 
   @Post(':id/anular')
