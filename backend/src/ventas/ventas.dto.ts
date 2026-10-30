@@ -18,6 +18,8 @@ import { AutorizacionDto } from '../auth/autorizacion.dto';
 
 export class VentaItemDto {
   @IsInt() productoId: number;
+  /** Si viene, la cantidad y el precio son de esa presentación (cajetilla, paquete…). */
+  @IsOptional() @IsInt() presentacionId?: number;
   @IsNumber() @IsPositive() cantidad: number;
   /** Si difiere del precio de lista, requiere autorización. */
   @IsOptional() @IsNumber() @Min(0) precioUnitario?: number;

@@ -153,12 +153,35 @@ model Producto {
 
   categoria   Categoria?        @relation(fields: [categoriaId], references: [id])
   marca       Marca?            @relation(fields: [marcaId], references: [id])
-  lotes       Lote[]
-  movimientos MovimientoStock[]
-  compraItems CompraItem[]
-  ventaItems  VentaItem[]
+  lotes          Lote[]
+  movimientos    MovimientoStock[]
+  compraItems    CompraItem[]
+  ventaItems     VentaItem[]
+  presentaciones Presentacion[]
 
   @@index([nombre])
+}
+
+// Otra forma de vender o comprar el producto (cajetilla x10, paquete x20…).
+// El stock siempre se cuenta en la unidad del producto: vender una
+// presentación descuenta "factor" unidades y comprarla las suma.
+model Presentacion {
+  id          Int     @id @default(autoincrement())
+  productoId  Int
+  nombre      String
+  // Unidades del producto que contiene.
+  factor      Decimal @db.Decimal(12, 3)
+  codigoBarra String? @unique
+  precio1     Decimal @default(0) @db.Decimal(12, 2)
+  precio2     Decimal @default(0) @db.Decimal(12, 2)
+  precio3     Decimal @default(0) @db.Decimal(12, 2)
+  activo      Boolean @default(true)
+
+  producto    Producto     @relation(fields: [productoId], references: [id])
+  ventaItems  VentaItem[]
+  compraItems CompraItem[]
+
+  @@index([productoId])
 }
 
 model Lote {
@@ -247,15 +270,20 @@ model CompraItem {
   id               Int       @id @default(autoincrement())
   compraId         Int
   productoId       Int
+  // Si se compró por presentación, cantidad y costo son de la presentación
+  // y al stock entran cantidad * factor unidades.
+  presentacionId   Int?
+  factor           Decimal   @default(1) @db.Decimal(12, 3)
   cantidad         Decimal   @db.Decimal(12, 3)
   costoUnitario    Decimal   @db.Decimal(12, 4)
   subtotal         Decimal   @db.Decimal(12, 2)
   codigoLote       String?
   fechaVencimiento DateTime? @db.Date
 
-  compra   Compra   @relation(fields: [compraId], references: [id])
-  producto Producto @relation(fields: [productoId], references: [id])
-  lote     Lote?
+  compra       Compra        @relation(fields: [compraId], references: [id])
+  producto     Producto      @relation(fields: [productoId], references: [id])
+  presentacion Presentacion? @relation(fields: [presentacionId], references: [id])
+  lote         Lote?
 }
 
 model PagoProveedor {
@@ -453,6 +481,10 @@ model VentaItem {
   id             Int           @id @default(autoincrement())
   ventaId        Int
   productoId     Int
+  // Si se vendió por presentación, cantidad, precio y costo son de la
+  // presentación y del stock salen cantidad * factor unidades.
+  presentacionId Int?
+  factor         Decimal       @default(1) @db.Decimal(12, 3)
   descripcion    String
   cantidad       Decimal       @db.Decimal(12, 3)
   precioUnitario Decimal       @db.Decimal(12, 2)
@@ -461,8 +493,9 @@ model VentaItem {
   costoUnitario  Decimal       @default(0) @db.Decimal(12, 4)
   afectacionIgv  AfectacionIgv
 
-  venta    Venta    @relation(fields: [ventaId], references: [id])
-  producto Producto @relation(fields: [productoId], references: [id])
+  venta        Venta         @relation(fields: [ventaId], references: [id])
+  producto     Producto      @relation(fields: [productoId], references: [id])
+  presentacion Presentacion? @relation(fields: [presentacionId], references: [id])
 }
 
 // Correcciones de una venta ya emitida (comprobante, cliente o pago), autorizadas por un administrador.

@@ -28,6 +28,22 @@ export interface Producto {
   activo: boolean;
   revisar: string | null;
   lotes?: Lote[];
+  presentaciones?: Presentacion[];
+  /** Presentación cuyo código se escaneó (solo al buscar por código). */
+  presentacion?: Presentacion | null;
+}
+
+/** Cajetilla, paquete, caja…: vende o compra "factor" unidades del producto con sus propios precios. */
+export interface Presentacion {
+  id: number;
+  productoId: number;
+  nombre: string;
+  factor: Dec;
+  codigoBarra: string | null;
+  precio1: Dec;
+  precio2: Dec;
+  precio3: Dec;
+  activo: boolean;
 }
 
 export interface Lote {
@@ -93,13 +109,16 @@ export interface Compra {
     subtotal: Dec;
     codigoLote: string | null;
     fechaVencimiento: string | null;
+    factor: Dec;
     producto: Pick<Producto, 'id' | 'nombre' | 'codigoBarra' | 'unidad'>;
+    presentacion: Pick<Presentacion, 'id' | 'nombre' | 'factor'> | null;
   }[];
   pagos?: { id: number; fecha: string; monto: Dec; medioPago: MedioPago; numeroOperacion: string | null; usuario: { nombre: string } }[];
 }
 
 export interface Sugerencia {
   productoId: number;
+  presentacionId: number | null;
   nombre: string;
   costoAnterior: number | null;
   costoNuevo: number;

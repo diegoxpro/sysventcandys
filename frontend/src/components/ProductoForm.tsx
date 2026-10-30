@@ -1,11 +1,21 @@
 import { useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
-import { fecha, margenReal, money, n, precioSugerido, qty } from '../format';
+import { equivalencia, fecha, margenReal, money, n, precioSugerido, qty } from '../format';
 import { Catalogo, Configuracion, Producto } from '../types';
 import { Campo, Modal, useCarga, useToast } from './ui';
 
 const UNIDADES = ['UND', 'BLLA', 'FCO', 'BSA', 'SCH', 'CJA', 'PQT', 'DOC', 'KG', 'LT'];
+
+interface FilaPresentacion {
+  id?: number;
+  nombre: string;
+  factor: string;
+  codigoBarra: string;
+  precio1: string;
+  precio2: string;
+  precio3: string;
+}
 
 export default function ProductoForm({ producto, onClose, onGuardado }: { producto?: Producto; onClose: () => void; onGuardado: () => void }) {
   const avisar = useToast();
@@ -34,6 +44,19 @@ export default function ProductoForm({ producto, onClose, onGuardado }: { produc
     controlaVencimiento: producto?.controlaVencimiento ?? false,
     activo: producto?.activo ?? true,
   });
+  const [pres, setPres] = useState<FilaPresentacion[]>(() =>
+    (producto?.presentaciones ?? []).map((x) => ({
+      id: x.id,
+      nombre: x.nombre,
+      factor: String(n(x.factor)),
+      codigoBarra: x.codigoBarra ?? '',
+      precio1: String(n(x.precio1)),
+      precio2: String(n(x.precio2)),
+      precio3: String(n(x.precio3)),
+    })),
+  );
+  const setP = (i: number, k: keyof FilaPresentacion, v: string) => setPres((l) => l.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
+  const presIncompleta = pres.some((x) => !x.nombre.trim() || n(x.factor) <= 1 || n(x.precio1) <= 0);
   const [revisado, setRevisado] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const set = (k: keyof typeof f, v: string | boolean) => setF((x) => ({ ...x, [k]: v }));
@@ -41,6 +64,20 @@ export default function ProductoForm({ producto, onClose, onGuardado }: { produc
   const margenDefecto = (i: 1 | 2 | 3) => n(cfg?.[`margen${i}`]);
   const margenDe = (i: 1 | 2 | 3) => (f[`margen${i}`] !== '' ? n(f[`margen${i}`]) : margenDefecto(i));
   const calcular = (i: 1 | 2 | 3) => set(`precio${i}`, String(precioSugerido(n(f.costo), margenDe(i), n(cfg?.redondeoPrecio ?? 0.1))));
+  // Precio de una presentación con el mismo margen, sobre el costo de todas sus unidades.
+  const calcularPres = (i: number) =>
+    setPres((l) =>
+      l.map((x, j) =>
+        j === i
+          ? {
+              ...x,
+              ...Object.fromEntries(
+                ([1, 2, 3] as const).map((k) => [`precio${k}`, String(precioSugerido(n(f.costo) * n(x.factor), margenDe(k), n(cfg?.redondeoPrecio ?? 0.1)))]),
+              ),
+            }
+          : x,
+      ),
+    );
 
   const nuevoCatalogo = async (tipo: 'categorias' | 'marcas') => {
     const nombre = window.prompt(tipo === 'categorias' ? 'Nombre de la nueva categoría' : 'Nombre de la nueva marca');
@@ -71,6 +108,15 @@ export default function ProductoForm({ producto, onClose, onGuardado }: { produc
       stockMinimo: n(f.stockMinimo),
       controlaVencimiento: f.controlaVencimiento,
       activo: f.activo,
+      presentaciones: pres.map((x) => ({
+        id: x.id,
+        nombre: x.nombre.trim(),
+        factor: n(x.factor),
+        codigoBarra: x.codigoBarra.trim() || null,
+        precio1: n(x.precio1),
+        precio2: n(x.precio2) || n(x.precio1),
+        precio3: n(x.precio3) || n(x.precio1),
+      })),
       ...(producto ? { revisado } : { stockInicial: n(f.stockInicial) || undefined }),
     };
     try {
@@ -93,7 +139,7 @@ export default function ProductoForm({ producto, onClose, onGuardado }: { produc
         esAdmin && (
           <>
             <button className="btn" onClick={onClose}>Cancelar</button>
-            <button className="btn btn-primary" onClick={guardar} disabled={enviando || f.nombre.trim().length < 2 || n(f.precio1) <= 0}>
+            <button className="btn btn-primary" onClick={guardar} disabled={enviando || f.nombre.trim().length < 2 || n(f.precio1) <= 0 || presIncompleta}>
               Guardar
             </button>
           </>
@@ -191,6 +237,67 @@ export default function ProductoForm({ producto, onClose, onGuardado }: { produc
           </div>
         </div>
 
+        <div className="card card-pad" style={{ background: 'var(--surface-2)' }}>
+          <div className="row" style={{ marginBottom: 8 }}>
+            <h3 className="grow">Presentaciones</h3>
+            <button type="button" className="btn btn-sm" onClick={() => setPres((l) => [...l, { nombre: '', factor: '', codigoBarra: '', precio1: '', precio2: '', precio3: '' }])}>
+              Agregar presentación
+            </button>
+          </div>
+          <p className="small muted" style={{ margin: '0 0 8px' }}>
+            Para vender o comprar por cajetilla, paquete o caja. El stock se cuenta en unidades ({f.unidad}): vender una cajetilla x20 descuenta 20, y comprar
+            5 cajas x20 suma 100.
+          </p>
+          {pres.length > 0 && (
+            <table>
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th className="num" style={{ width: 72 }}>Unidades</th>
+                  <th style={{ width: 130 }}>Código de barras</th>
+                  {[1, 2, 3].map((k) => <th key={k} className="num" style={{ width: 80 }}>Precio {k}</th>)}
+                  <th style={{ width: 80 }} />
+                  <th style={{ width: 32 }} />
+                </tr>
+              </thead>
+              <tbody>
+                {pres.map((x, i) => {
+                  const costo = n(f.costo) * n(x.factor);
+                  const real = margenReal(costo, n(x.precio1));
+                  return (
+                    <tr key={x.id ?? `nueva-${i}`}>
+                      <td style={{ minWidth: 190 }}>
+                        <input value={x.nombre} onChange={(e) => setP(i, 'nombre', e.target.value)} placeholder="Cajetilla x20" aria-label="Nombre de la presentación" />
+                        {n(x.factor) > 1 && costo > 0 && (
+                          <div className="small muted">
+                            Costo {money(costo)}{real != null && n(x.precio1) > 0 ? ` · ganancia ${real}%` : ''} · {money(n(x.precio1) / n(x.factor))} c/u
+                          </div>
+                        )}
+                      </td>
+                      <td><input className="num" type="number" min="2" step="any" value={x.factor} onChange={(e) => setP(i, 'factor', e.target.value)} aria-label="Unidades que trae" /></td>
+                      <td><input className="mono" value={x.codigoBarra} onChange={(e) => setP(i, 'codigoBarra', e.target.value)} placeholder="Opcional" aria-label="Código de barras" /></td>
+                      {([1, 2, 3] as const).map((k) => (
+                        <td key={k}>
+                          <input className="num" type="number" step="0.01" min="0" value={x[`precio${k}`]} onChange={(e) => setP(i, `precio${k}`, e.target.value)} aria-label={`Precio ${k}`} />
+                        </td>
+                      ))}
+                      <td>
+                        <button type="button" className="btn btn-sm" onClick={() => calcularPres(i)} disabled={n(f.costo) <= 0 || n(x.factor) <= 1} title="Calcular los 3 precios con tus márgenes">
+                          Calcular
+                        </button>
+                      </td>
+                      <td>
+                        <button type="button" className="close" onClick={() => setPres((l) => l.filter((_, j) => j !== i))} aria-label="Quitar presentación">×</button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+          {presIncompleta && <div className="small" style={{ color: 'var(--warn)', marginTop: 6 }}>Cada presentación necesita nombre, más de 1 unidad y precio 1.</div>}
+        </div>
+
         <div className="grid-4">
           {!producto && (
             <Campo label="Stock inicial">
@@ -198,7 +305,7 @@ export default function ProductoForm({ producto, onClose, onGuardado }: { produc
             </Campo>
           )}
           {producto && (
-            <Campo label="Stock actual" ayuda="Se cambia con compras, ventas o ajustes">
+            <Campo label="Stock actual" ayuda={equivalencia(producto.stock, producto.presentaciones) ? `= ${equivalencia(producto.stock, producto.presentaciones)}` : 'Se cambia con compras, ventas o ajustes'}>
               <input className="num" value={qty(producto.stock)} readOnly tabIndex={-1} />
             </Campo>
           )}

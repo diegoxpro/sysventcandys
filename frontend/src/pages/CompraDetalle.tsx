@@ -83,7 +83,10 @@ export default function CompraDetalle() {
                 <tr key={i.id}>
                   <td>{i.producto.nombre}<div className="small muted mono">{i.producto.codigoBarra}</div></td>
                   <td>{i.fechaVencimiento ? <>{i.codigoLote ?? '—'} · {fecha(i.fechaVencimiento)}</> : <span className="muted">—</span>}</td>
-                  <td className="num">{qty(i.cantidad)} {i.producto.unidad}</td>
+                  <td className="num">
+                    {qty(i.cantidad)} {i.presentacion?.nombre ?? i.producto.unidad}
+                    {i.presentacion && <div className="small muted">{qty(n(i.cantidad) * n(i.factor))} und</div>}
+                  </td>
                   <td className="num">{money(i.costoUnitario)}</td>
                   <td className="num">{money(i.subtotal)}</td>
                 </tr>

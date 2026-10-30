@@ -6,6 +6,17 @@ export const money = (v: unknown) => soles.format(n(v));
 export const qty = (v: unknown) => numero.format(n(v));
 
 /** Fechas de columnas DATE llegan como medianoche UTC: se muestran sin desfase. */
+/** Stock en unidades expresado con la presentación más grande: "67 = 3 x20 + 7". */
+export function equivalencia(stock: unknown, presentaciones?: { nombre: string; factor: unknown }[]) {
+  const mayor = presentaciones?.reduce<{ nombre: string; factor: unknown } | null>((m, p) => (!m || n(p.factor) > n(m.factor) ? p : m), null);
+  const f = n(mayor?.factor);
+  const s = n(stock);
+  if (!mayor || f <= 1 || s < f) return null;
+  const enteras = Math.floor(s / f);
+  const resto = Math.round((s - enteras * f) * 1000) / 1000;
+  return `${enteras} ${mayor.nombre.toLowerCase()}${resto ? ` + ${qty(resto)}` : ''}`;
+}
+
 export function fecha(v?: string | null) {
   if (!v) return '';
   const [y, m, d] = v.slice(0, 10).split('-');

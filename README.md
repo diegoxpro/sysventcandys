@@ -10,6 +10,7 @@ Sistema de ventas para minimarket que funciona **sin internet** en la PC de la t
 | Módulo | Qué hace |
 | --- | --- |
 | Productos | Código de barras (opcional), 3 precios con su margen, costo, stock, stock mínimo, IGV (exonerado por defecto, región San Martín), control de vencimiento opcional. |
+| Presentaciones | Para lo que viene en cajetilla, paquete o caja y a veces se vende suelto (cigarros, caramelos…). El stock se cuenta en unidades; cada presentación tiene su factor (x10, x20…), su código de barras y sus 3 precios. Vender una cajetilla x20 descuenta 20 unidades; comprar 5 cajas x20 suma 100 y guarda el costo por unidad. El kardex y las alertas quedan en unidades, y la lista de productos muestra el equivalente ("3 cajetilla x20 + 7"). |
 | Importación SysVent | Carga el "Reporte de stock de producto" exportado a CSV. Marca para revisar los datos dudosos. |
 | Compras | Registro de factura del proveedor (serie y número únicos), contado o crédito, lotes con vencimiento. Suma stock, guarda el último costo y **sugiere precios** según el margen. Anulación con reversión de stock. |
 | Cuentas por pagar | Saldo por proveedor y por factura, pagos parciales con medio de pago y n.º de operación opcional. |

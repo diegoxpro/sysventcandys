@@ -15,6 +15,7 @@ export interface FiltroCompras {
 }
 
 const redondear2 = (n: number) => Math.round(n * 100) / 100;
+const redondear4 = (n: number) => Math.round(n * 10000) / 10000;
 
 @Injectable()
 export class ComprasService {
@@ -49,7 +50,12 @@ export class ComprasService {
       include: {
         proveedor: true,
         usuario: { select: { nombre: true } },
-        items: { include: { producto: { select: { id: true, nombre: true, codigoBarra: true, unidad: true } } } },
+        items: {
+          include: {
+            producto: { select: { id: true, nombre: true, codigoBarra: true, unidad: true } },
+            presentacion: { select: { id: true, nombre: true, factor: true } },
+          },
+        },
         pagos: { include: { usuario: { select: { nombre: true } } }, orderBy: { fecha: 'asc' } },
       },
     });
@@ -77,15 +83,21 @@ export class ComprasService {
 
     const productos = await this.prisma.producto.findMany({
       where: { id: { in: dto.items.map((i) => i.productoId) } },
+      include: { presentaciones: { where: { activo: true } } },
     });
     const porId = new Map(productos.map((p) => [p.id, p]));
-    for (const i of dto.items) {
+    // Presentación de cada línea: factor 1 si se compró por unidad.
+    const formas = dto.items.map((i) => {
       const p = porId.get(i.productoId);
       if (!p) throw new BadRequestException(`Producto ${i.productoId} no existe`);
       if (p.controlaVencimiento && !i.fechaVencimiento) {
         throw new BadRequestException(`Falta la fecha de vencimiento de ${p.nombre}`);
       }
-    }
+      if (!i.presentacionId) return { factor: 1, nombre: null };
+      const pres = p.presentaciones.find((x) => x.id === i.presentacionId);
+      if (!pres) throw new BadRequestException(`La presentación ya no está disponible en ${p.nombre}`);
+      return { factor: Number(pres.factor), nombre: pres.nombre };
+    });
 
     const total = redondear2(dto.items.reduce((s, i) => s + i.cantidad * i.costoUnitario, 0));
     const contado = dto.condicion === CondicionPago.CONTADO;
@@ -108,11 +120,15 @@ export class ComprasService {
         },
       });
 
-      for (const i of dto.items) {
+      for (const [k, i] of dto.items.entries()) {
+        const { factor, nombre } = formas[k];
+        const costoUnidad = redondear4(i.costoUnitario / factor);
         const item = await tx.compraItem.create({
           data: {
             compraId: compra.id,
             productoId: i.productoId,
+            presentacionId: i.presentacionId,
+            factor,
             cantidad: i.cantidad,
             costoUnitario: i.costoUnitario,
             subtotal: redondear2(i.cantidad * i.costoUnitario),
@@ -135,14 +151,15 @@ export class ComprasService {
         await this.stock.mover(tx, {
           productoId: i.productoId,
           tipo: TipoMovimiento.COMPRA,
-          cantidad: i.cantidad,
-          costoUnitario: i.costoUnitario,
+          cantidad: i.cantidad * factor,
+          costoUnitario: costoUnidad,
           usuarioId,
           loteId: lote?.id,
           referencia,
+          motivo: nombre ? `${i.cantidad} ${nombre} (x${factor}) a S/ ${i.costoUnitario}` : undefined,
         });
-        // Se guarda el último costo de compra.
-        await tx.producto.update({ where: { id: i.productoId }, data: { costo: i.costoUnitario } });
+        // Se guarda el último costo de compra, siempre por unidad.
+        await tx.producto.update({ where: { id: i.productoId }, data: { costo: costoUnidad } });
       }
 
       if (contado && total > 0) {
@@ -158,30 +175,44 @@ export class ComprasService {
 
   /**
    * Precios sugeridos para los productos de una compra, según su margen
-   * (o el de la configuración). Solo lista los que cambiarían.
+   * (o el de la configuración). Solo lista los que cambiarían. Si el producto
+   * tiene presentaciones, también sugiere el precio de cada una (costo × factor).
    */
   async sugerencias(compraId: number, antes?: { id: number; costo: Prisma.Decimal }[]) {
     const cfg = await this.config.obtener();
-    const items = await this.prisma.compraItem.findMany({ where: { compraId }, include: { producto: true } });
+    const items = await this.prisma.compraItem.findMany({
+      where: { compraId },
+      include: { producto: { include: { presentaciones: { where: { activo: true }, orderBy: { factor: 'asc' } } } } },
+    });
     const costoAnterior = new Map(antes?.map((p) => [p.id, Number(p.costo)]));
     const vistos = new Set<number>();
     const res = [];
-    for (const { producto: p, costoUnitario } of items) {
+    for (const { producto: p, costoUnitario, factor } of items) {
       if (vistos.has(p.id)) continue;
       vistos.add(p.id);
       const margenes = [p.margen1 ?? cfg.margen1, p.margen2 ?? cfg.margen2, p.margen3 ?? cfg.margen3].map(Number);
-      const actuales = [p.precio1, p.precio2, p.precio3].map(Number);
-      const sugeridos = margenes.map((m) => precioSugerido(costoUnitario, m, cfg.redondeoPrecio));
-      if (sugeridos.every((s, k) => s === actuales[k])) continue;
-      res.push({
-        productoId: p.id,
-        nombre: p.nombre,
-        costoAnterior: costoAnterior.get(p.id) ?? null,
-        costoNuevo: Number(costoUnitario),
-        margenes,
-        actuales,
-        sugeridos,
-      });
+      const costoUnidad = redondear4(Number(costoUnitario) / Number(factor));
+      const anterior = costoAnterior.get(p.id) ?? null;
+      const formas = [
+        { presentacionId: null as number | null, nombre: p.nombre, factor: 1, precios: p },
+        ...p.presentaciones.map((x) => ({ presentacionId: x.id, nombre: `${p.nombre} - ${x.nombre}`, factor: Number(x.factor), precios: x })),
+      ];
+      for (const f of formas) {
+        const costo = redondear4(costoUnidad * f.factor);
+        const actuales = [f.precios.precio1, f.precios.precio2, f.precios.precio3].map(Number);
+        const sugeridos = margenes.map((m) => precioSugerido(costo, m, cfg.redondeoPrecio));
+        if (sugeridos.every((s, k) => s === actuales[k])) continue;
+        res.push({
+          productoId: p.id,
+          presentacionId: f.presentacionId,
+          nombre: f.nombre,
+          costoAnterior: anterior != null ? redondear4(anterior * f.factor) : null,
+          costoNuevo: costo,
+          margenes,
+          actuales,
+          sugeridos,
+        });
+      }
     }
     return res;
   }
@@ -231,7 +262,8 @@ export class ComprasService {
         // Si parte del lote ya salió (merma), se descuenta del lote lo que queda
         // y el resto solo del stock general.
         const lote = await tx.lote.findUnique({ where: { compraItemId: i.id } });
-        const total = Number(i.cantidad);
+        // Las presentaciones entraron como cantidad × factor unidades.
+        const total = Number(i.cantidad) * Number(i.factor);
         const delLote = lote ? Math.min(total, Number(lote.cantidad)) : 0;
         const partes = [
           { cantidad: delLote, loteId: lote?.id },
@@ -242,7 +274,7 @@ export class ComprasService {
             productoId: i.productoId,
             tipo: TipoMovimiento.ANULACION_COMPRA,
             cantidad: -parte.cantidad,
-            costoUnitario: Number(i.costoUnitario),
+            costoUnitario: redondear4(Number(i.costoUnitario) / Number(i.factor)),
             usuarioId,
             loteId: parte.loteId,
             referencia,

@@ -9,10 +9,12 @@ import CobroModal, { PagoVenta } from '../components/CobroModal';
 import { Kbd, useAtajos, useCarga, useToast } from '../components/ui';
 import { money, n, qty } from '../format';
 import { correlativo, imprimirVenta } from '../ticket';
-import { Caja, Cliente, COMPROBANTE_LABEL, Configuracion, Producto, Serie, TipoComprobante, Venta as TVenta } from '../types';
+import { Caja, Cliente, COMPROBANTE_LABEL, Configuracion, Presentacion, Producto, Serie, TipoComprobante, Venta as TVenta } from '../types';
 
 interface Linea {
   producto: Producto;
+  /** Si se vende por cajetilla, paquete…; la cantidad es de esa presentación. */
+  presentacion?: Presentacion | null;
   cantidad: number;
   /** Precio cambiado a mano; si no, se usa el del nivel elegido. */
   precioManual?: number;
@@ -39,6 +41,8 @@ function recuperarVenta(): Borrador {
 }
 
 const r2 = (x: number) => Math.round(x * 100) / 100;
+const claveDe = (p: Producto, x?: Presentacion | null) => `${p.id}-${x?.id ?? 0}`;
+const factorDe = (l: Linea) => n(l.presentacion?.factor ?? 1);
 
 export default function Venta() {
   const avisar = useToast();
@@ -49,7 +53,7 @@ export default function Venta() {
   const { data: series, recargar: recargarSeries } = useCarga(() => api<Serie[]>('/series'), []);
 
   const [b, setB] = useState<Borrador>(recuperarVenta);
-  const [ultimo, setUltimo] = useState<number | null>(null);
+  const [ultimo, setUltimo] = useState<string | null>(null);
   const [cobrando, setCobrando] = useState(() => !!b.cobro && b.lineas.length > 0);
   const [enviando, setEnviando] = useState(false);
   const [eligiendoCliente, setEligiendoCliente] = useState(false);
@@ -62,16 +66,23 @@ export default function Venta() {
   useEffect(() => {
     if (!b.lineas.length) return;
     Promise.all(b.lineas.map((l) => api<Producto>(`/productos/${l.producto.id}`).catch(() => null))).then((ps) =>
-      setB((x) => ({ ...x, lineas: x.lineas.map((l) => ({ ...l, producto: ps.find((p) => p?.id === l.producto.id) ?? l.producto })) })),
+      setB((x) => ({
+        ...x,
+        lineas: x.lineas.map((l) => {
+          const producto = ps.find((p) => p?.id === l.producto.id) ?? l.producto;
+          const presentacion = l.presentacion ? producto.presentaciones?.find((p) => p.id === l.presentacion!.id) ?? l.presentacion : l.presentacion;
+          return { ...l, producto, presentacion };
+        }),
+      })),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const precioDe = (l: Linea) => l.precioManual ?? n(l.producto[`precio${b.nivel}`]);
+  const precioDe = (l: Linea) => l.precioManual ?? n((l.presentacion ?? l.producto)[`precio${b.nivel}`]);
   const importe = (l: Linea) => r2(l.cantidad * precioDe(l) - l.descuento);
   const subtotal = r2(b.lineas.reduce((s, l) => s + importe(l), 0));
   const total = r2(subtotal - b.descuento);
-  const unidades = b.lineas.reduce((s, l) => s + l.cantidad, 0);
+  const unidades = b.lineas.reduce((s, l) => s + l.cantidad * factorDe(l), 0);
   // Número que tomará la próxima venta (el backend usa la primera serie activa del tipo).
   const serie = series?.find((x) => x.tipo === b.tipo && x.activa);
   const proximo = serie ? correlativo({ serie: serie.serie, numero: serie.ultimoNumero + 1 }) : null;
@@ -80,18 +91,29 @@ export default function Venta() {
   const set = (cambios: Partial<Borrador>) => setB((x) => ({ ...x, ...cambios }));
   const setLinea = (i: number, cambios: Partial<Linea>) => setB((x) => ({ ...x, lineas: x.lineas.map((l, j) => (j === i ? { ...l, ...cambios } : l)) }));
 
-  const agregar = (p: Producto) => {
-    const enCarrito = b.lineas.find((l) => l.producto.id === p.id)?.cantidad ?? 0;
-    if (!cfg?.permitirVentaSinStock && enCarrito + 1 > n(p.stock)) {
-      avisar(n(p.stock) <= 0 ? `${p.nombre} no tiene stock` : `Solo hay ${qty(p.stock)} de ${p.nombre}`, true);
-      return;
-    }
-    setUltimo(p.id);
+  // El stock está en unidades: una cajetilla x20 usa 20.
+  const unidadesEnCarrito = (productoId: number, excepto?: number) =>
+    b.lineas.reduce((s, l, j) => (l.producto.id === productoId && j !== excepto ? s + l.cantidad * factorDe(l) : s), 0);
+  const hayStock = (p: Producto, unidades: number) => {
+    if (cfg?.permitirVentaSinStock || unidades <= n(p.stock)) return true;
+    avisar(n(p.stock) <= 0 ? `${p.nombre} no tiene stock` : `Solo hay ${qty(p.stock)} unidades de ${p.nombre}`, true);
+    return false;
+  };
+
+  const agregar = (p: Producto, presentacion: Presentacion | null = null) => {
+    if (!hayStock(p, unidadesEnCarrito(p.id) + n(presentacion?.factor ?? 1))) return;
+    const clave = claveDe(p, presentacion);
+    setUltimo(clave);
     setB((x) => {
-      const i = x.lineas.findIndex((l) => l.producto.id === p.id);
+      const i = x.lineas.findIndex((l) => claveDe(l.producto, l.presentacion) === clave);
       if (i >= 0) return { ...x, lineas: x.lineas.map((l, j) => (j === i ? { ...l, cantidad: l.cantidad + 1 } : l)) };
-      return { ...x, lineas: [...x.lineas, { producto: p, cantidad: 1, descuento: 0 }] };
+      return { ...x, lineas: [...x.lineas, { producto: p, presentacion, cantidad: 1, descuento: 0 }] };
     });
+  };
+  const cambiarCantidad = (i: number, cantidad: number) => {
+    const l = b.lineas[i];
+    if (cantidad > l.cantidad && !hayStock(l.producto, unidadesEnCarrito(l.producto.id, i) + cantidad * factorDe(l))) return;
+    setLinea(i, { cantidad });
   };
 
   const limpiar = useCallback(() => {
@@ -121,6 +143,7 @@ export default function Venta() {
               descuento: b.descuento || undefined,
               items: b.lineas.map((l) => ({
                 productoId: l.producto.id,
+                presentacionId: l.presentacion?.id,
                 cantidad: l.cantidad,
                 precioUnitario: l.precioManual,
                 descuento: l.descuento || undefined,
@@ -177,7 +200,7 @@ export default function Venta() {
       <div className="card pos-main">
         <div className="pos-bar">
           <div className="search">
-            <BuscadorProducto ref={buscador} onElegir={agregar} placeholder="Escanea o escribe el producto (F2)" />
+            <BuscadorProducto ref={buscador} onElegir={agregar} conPresentaciones placeholder="Escanea o escribe el producto (F2)" />
           </div>
           <div className="pos-opcion">
             <div className="segmented" role="group" aria-label="Comprobante (F4)">
@@ -211,11 +234,12 @@ export default function Venta() {
             </thead>
             <tbody>
               {b.lineas.map((l, i) => (
-                <tr key={l.producto.id} className={ultimo === l.producto.id ? 'ultimo' : ''}>
+                <tr key={claveDe(l.producto, l.presentacion)} className={ultimo === claveDe(l.producto, l.presentacion) ? 'ultimo' : ''}>
                   <td>
                     {l.producto.nombre}
+                    {l.presentacion && <span className="badge info" style={{ marginLeft: 6 }}>{l.presentacion.nombre} · {qty(l.presentacion.factor)} und</span>}
                     <div className="small muted">
-                      <span className="mono">{l.producto.codigoBarra ?? 'sin código'}</span> · stock {qty(l.producto.stock)}
+                      <span className="mono">{(l.presentacion ? l.presentacion.codigoBarra : l.producto.codigoBarra) ?? 'sin código'}</span> · stock {qty(l.producto.stock)} und
                       {l.descuento > 0 && <span className="badge accent" style={{ marginLeft: 6 }}>Dscto {money(l.descuento)}</span>}
                     </div>
                   </td>
@@ -227,10 +251,10 @@ export default function Venta() {
                         min="1"
                         step="1"
                         value={l.cantidad}
-                        onChange={(e) => n(e.target.value) > 0 && setLinea(i, { cantidad: n(e.target.value) })}
+                        onChange={(e) => n(e.target.value) > 0 && cambiarCantidad(i, n(e.target.value))}
                         onKeyDown={(e) => e.key === 'Enter' && enfocar()}
                       />
-                      <button className="btn" onClick={() => setLinea(i, { cantidad: l.cantidad + 1 })} aria-label="Más">+</button>
+                      <button className="btn" onClick={() => cambiarCantidad(i, l.cantidad + 1)} aria-label="Más">+</button>
                     </div>
                   </td>
                   <td className="num">

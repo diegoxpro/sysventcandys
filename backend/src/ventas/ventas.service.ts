@@ -49,15 +49,34 @@ export class VentasService {
   ) {}
 
   async crear(dto: CrearVentaDto, user: UsuarioSesion) {
-    const productos = await this.prisma.producto.findMany({ where: { id: { in: dto.items.map((i) => i.productoId) } } });
+    const productos = await this.prisma.producto.findMany({
+      where: { id: { in: dto.items.map((i) => i.productoId) } },
+      include: { presentaciones: { where: { activo: true } } },
+    });
     const porId = new Map(productos.map((p) => [p.id, p]));
 
     const lineas = dto.items.map((i) => {
       const p = porId.get(i.productoId);
       if (!p || !p.activo) throw new BadRequestException(`Producto ${i.productoId} no disponible`);
-      const lista = Number(p[`precio${dto.nivelPrecio as 1 | 2 | 3}`]);
+      const pres = i.presentacionId ? p.presentaciones.find((x) => x.id === i.presentacionId) : null;
+      if (i.presentacionId && !pres) throw new BadRequestException(`La presentación ya no está disponible en ${p.nombre}`);
+      // Una presentación tiene sus propios precios; el stock y el costo se llevan en unidades.
+      const factor = pres ? Number(pres.factor) : 1;
+      const lista = Number((pres ?? p)[`precio${dto.nivelPrecio as 1 | 2 | 3}`]);
       const precio = i.precioUnitario ?? lista;
-      return { producto: p, cantidad: i.cantidad, precioUnitario: r2(precio), lista, descuento: r2(i.descuento ?? 0), afectacionIgv: p.afectacionIgv };
+      return {
+        producto: p,
+        presentacion: pres,
+        factor,
+        descripcion: pres ? `${p.nombre} - ${pres.nombre}` : p.nombre,
+        cantidad: i.cantidad,
+        unidades: i.cantidad * factor,
+        costoUnitario: Number(p.costo) * factor,
+        precioUnitario: r2(precio),
+        lista,
+        descuento: r2(i.descuento ?? 0),
+        afectacionIgv: p.afectacionIgv,
+      };
     });
 
     // Descuentos y precios distintos al de lista los autoriza un administrador.
@@ -86,7 +105,7 @@ export class VentasService {
 
       const serie = await this.siguienteNumero(tx, dto.tipoComprobante);
 
-      const costoTotal = r2(lineas.reduce((s, l) => s + l.cantidad * Number(l.producto.costo), 0));
+      const costoTotal = r2(lineas.reduce((s, l) => s + l.cantidad * l.costoUnitario, 0));
       const venta = await tx.venta.create({
         data: {
           cajaId: caja.id,
@@ -112,12 +131,14 @@ export class VentasService {
           items: {
             create: lineas.map((l, i) => ({
               productoId: l.producto.id,
-              descripcion: l.producto.nombre,
+              presentacionId: l.presentacion?.id,
+              factor: l.factor,
+              descripcion: l.descripcion,
               cantidad: l.cantidad,
               precioUnitario: l.precioUnitario,
               descuento: l.descuento,
               subtotal: totales.subtotales[i],
-              costoUnitario: l.producto.costo,
+              costoUnitario: l.costoUnitario,
               afectacionIgv: l.afectacionIgv,
             })),
           },
@@ -134,10 +155,11 @@ export class VentasService {
 
       const referencia = correlativo({ serie: serie.serie, numero: serie.ultimoNumero });
       for (const l of lineas) {
-        await this.descontar(tx, l.producto, l.cantidad, {
+        await this.descontar(tx, l.producto, l.unidades, {
           ventaId: venta.id,
           usuarioId: user.id,
           referencia,
+          motivo: l.presentacion ? `${l.cantidad} ${l.presentacion.nombre} (x${l.factor})` : undefined,
           permitirNegativo: cfg.permitirVentaSinStock,
         });
       }
@@ -279,7 +301,7 @@ export class VentasService {
     tx: Prisma.TransactionClient,
     producto: { id: number; costo: Prisma.Decimal; controlaVencimiento: boolean },
     cantidad: number,
-    extra: { ventaId: number; usuarioId: number; referencia: string; permitirNegativo: boolean },
+    extra: { ventaId: number; usuarioId: number; referencia: string; motivo?: string; permitirNegativo: boolean },
   ) {
     let pendiente = cantidad;
     const base = {
@@ -288,6 +310,7 @@ export class VentasService {
       costoUnitario: Number(producto.costo),
       usuarioId: extra.usuarioId,
       referencia: extra.referencia,
+      motivo: extra.motivo,
       permitirNegativo: extra.permitirNegativo,
     };
     if (producto.controlaVencimiento) {
@@ -300,7 +323,7 @@ export class VentasService {
         const tomar = Math.min(pendiente, Number(lote.cantidad));
         const m = await this.stock.mover(tx, { ...base, cantidad: -tomar, loteId: lote.id });
         await tx.movimientoStock.update({ where: { id: m.id }, data: { ventaId: extra.ventaId } });
-        pendiente = r2(pendiente - tomar);
+        pendiente = Math.round((pendiente - tomar) * 1000) / 1000;
       }
     }
     if (pendiente > 0) {
