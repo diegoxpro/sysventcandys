@@ -16,11 +16,13 @@
 .segmented button { border: 0; background: var(--surface); padding: 0 12px; height: 36px; font: inherit; cursor: pointer; color: var(--text-2); border-right: 1px solid var(--border); }
 .segmented button:last-child { border-right: 0; }
 .segmented button.on { background: var(--text); color: #fff; font-weight: 600; }
+.pos-opcion { display: flex; flex-direction: column; align-items: center; gap: 3px; }
 .qty { display: inline-flex; align-items: center; gap: 4px; }
 .qty input { width: 64px; text-align: center; height: 32px; }
 .qty button { width: 28px; height: 28px; padding: 0; }
 .atajos { display: flex; gap: 14px; flex-wrap: wrap; color: var(--text-2); font-size: 12px; padding: 8px 12px; border-top: 1px solid var(--border); }
 .pago-fila { display: grid; grid-template-columns: 120px 1fr 1fr; gap: 8px; align-items: center; }
+.pago-fila .medio { justify-content: space-between; gap: 8px; }
 .rapidos { display: flex; gap: 6px; flex-wrap: wrap; }
 .vuelto { font-size: 28px; font-weight: 750; font-variant-numeric: tabular-nums; }
 .denominaciones { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 20px; }

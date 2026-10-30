@@ -8,7 +8,7 @@ import CobroModal, { PagoVenta } from '../components/CobroModal';
 import { Kbd, useAtajos, useCarga, useToast } from '../components/ui';
 import { money, n, qty } from '../format';
 import { correlativo, imprimirVenta } from '../ticket';
-import { Caja, Cliente, COMPROBANTE_LABEL, Configuracion, Producto, TipoComprobante, Venta as TVenta } from '../types';
+import { Caja, Cliente, COMPROBANTE_LABEL, Configuracion, Producto, Serie, TipoComprobante, Venta as TVenta } from '../types';
 
 interface Linea {
   producto: Producto;
@@ -27,11 +27,14 @@ interface Borrador {
 }
 
 const CLAVE = 'candys.venta';
-const vacio: Borrador = { lineas: [], tipo: 'BOLETA', nivel: 1, cliente: null, descuento: 0 };
+// Cada venta empieza en boleta libre y precio 1.
+const vacio: Borrador = { lineas: [], tipo: 'BOLETA_LIBRE', nivel: 1, cliente: null, descuento: 0 };
 
 function leerBorrador(): Borrador {
   try {
-    return { ...vacio, ...JSON.parse(localStorage.getItem(CLAVE) ?? '{}') };
+    const guardado: Partial<Borrador> = JSON.parse(localStorage.getItem(CLAVE) ?? '{}');
+    // Solo se recupera una venta que tenía productos; si no, se parte de lo predeterminado.
+    return guardado.lineas?.length ? { ...vacio, ...guardado } : vacio;
   } catch {
     return vacio;
   }
@@ -45,6 +48,7 @@ export default function Venta() {
   const buscador = useRef<HTMLInputElement>(null);
   const { data: caja, cargando: cargandoCaja } = useCarga(() => api<Caja | null>('/caja/actual'), []);
   const { data: cfg } = useCarga(() => api<Configuracion>('/configuracion'), []);
+  const { data: series, recargar: recargarSeries } = useCarga(() => api<Serie[]>('/series'), []);
 
   const [b, setB] = useState<Borrador>(leerBorrador);
   const [ultimo, setUltimo] = useState<number | null>(null);
@@ -67,6 +71,9 @@ export default function Venta() {
   const subtotal = r2(b.lineas.reduce((s, l) => s + importe(l), 0));
   const total = r2(subtotal - b.descuento);
   const unidades = b.lineas.reduce((s, l) => s + l.cantidad, 0);
+  // Número que tomará la próxima venta (el backend usa la primera serie activa del tipo).
+  const serie = series?.find((x) => x.tipo === b.tipo && x.activa);
+  const proximo = serie ? correlativo({ serie: serie.serie, numero: serie.ultimoNumero + 1 }) : null;
 
   const enfocar = () => setTimeout(() => buscador.current?.focus(), 0);
   const set = (cambios: Partial<Borrador>) => setB((x) => ({ ...x, ...cambios }));
@@ -87,7 +94,7 @@ export default function Venta() {
   };
 
   const limpiar = useCallback(() => {
-    setB((x) => ({ ...vacio, tipo: x.tipo }));
+    setB(vacio);
     setUltimo(null);
     enfocar();
   }, []);
@@ -126,13 +133,17 @@ export default function Venta() {
       if (imprimir && cfg) imprimirVenta(venta, cfg);
       setVentaPrevia(venta);
       setCobrando(false);
+      recargarSeries();
       limpiar();
     } catch (e) {
       avisar((e as Error).message, true);
+      recargarSeries();
     } finally {
       setEnviando(false);
     }
   };
+
+  const cancelar = () => b.lineas.length && window.confirm('¿Cancelar la venta en curso?') && limpiar();
 
   // Atajos de teclado del punto de venta.
   useAtajos(
@@ -141,7 +152,10 @@ export default function Venta() {
       F4: () => set({ tipo: b.tipo === 'BOLETA' ? 'BOLETA_LIBRE' : 'BOLETA' }),
       F6: () => set({ nivel: ((b.nivel % 3) + 1) as 1 | 2 | 3 }),
       F7: () => setEligiendoCliente(true),
+      F8: () => b.lineas.length && pedirDescuento(),
       F9: () => b.lineas.length && total > 0 && setCobrando(true),
+      F10: cancelar,
+      F11: () => !b.lineas.length && ventaPrevia && cfg && imprimirVenta(ventaPrevia, cfg),
     },
     { activo: !!caja },
   );
@@ -164,15 +178,23 @@ export default function Venta() {
           <div className="search">
             <BuscadorProducto ref={buscador} onElegir={agregar} placeholder="Escanea o escribe el producto (F2)" />
           </div>
-          <div className="segmented" role="group" aria-label="Comprobante (F4)">
-            {(['BOLETA', 'BOLETA_LIBRE'] as const).map((t) => (
-              <button key={t} className={b.tipo === t ? 'on' : ''} onClick={() => set({ tipo: t })}>{COMPROBANTE_LABEL[t]}</button>
-            ))}
+          <div className="pos-opcion">
+            <div className="segmented" role="group" aria-label="Comprobante (F4)">
+              {(['BOLETA', 'BOLETA_LIBRE'] as const).map((t) => (
+                <button key={t} className={b.tipo === t ? 'on' : ''} onClick={() => set({ tipo: t })}>{COMPROBANTE_LABEL[t]}</button>
+              ))}
+            </div>
+            <div className="small muted">
+              <Kbd>F4</Kbd> N.º <b className="mono">{proximo ?? 'sin serie activa'}</b>
+            </div>
           </div>
-          <div className="segmented" role="group" aria-label="Nivel de precio (F6)">
-            {([1, 2, 3] as const).map((k) => (
-              <button key={k} className={b.nivel === k ? 'on' : ''} onClick={() => set({ nivel: k })} title={`Precio ${k}`}>P{k}</button>
-            ))}
+          <div className="pos-opcion">
+            <div className="segmented" role="group" aria-label="Nivel de precio (F6)">
+              {([1, 2, 3] as const).map((k) => (
+                <button key={k} className={b.nivel === k ? 'on' : ''} onClick={() => set({ nivel: k })} title={`Precio ${k}`}>P{k}</button>
+              ))}
+            </div>
+            <div className="small muted"><Kbd>F6</Kbd> Precio</div>
           </div>
         </div>
         <div className="pos-items">
@@ -238,7 +260,7 @@ export default function Venta() {
                 <div style={{ marginTop: 12 }}>
                   Última venta: <b className="mono">{correlativo(ventaPrevia)}</b> por {money(ventaPrevia.total)}
                   {n(ventaPrevia.vuelto) > 0 && <> · vuelto <b>{money(ventaPrevia.vuelto)}</b></>}{' '}
-                  <button className="btn btn-sm" onClick={() => cfg && imprimirVenta(ventaPrevia, cfg)}>Reimprimir</button>
+                  <button className="btn btn-sm" onClick={() => cfg && imprimirVenta(ventaPrevia, cfg)}>Reimprimir <Kbd>F11</Kbd></button>
                 </div>
               )}
             </div>
@@ -249,13 +271,17 @@ export default function Venta() {
           <span><Kbd>F4</Kbd> Boleta / libre</span>
           <span><Kbd>F6</Kbd> Precio 1-2-3</span>
           <span><Kbd>F7</Kbd> Cliente</span>
+          <span><Kbd>F8</Kbd> Descuento</span>
           <span><Kbd>F9</Kbd> Cobrar</span>
+          <span><Kbd>F10</Kbd> Cancelar venta</span>
         </div>
       </div>
 
       <div className="pos-side">
         <div className="card pos-total">
-          <div className="label">{COMPROBANTE_LABEL[b.tipo]} · Precio {b.nivel}</div>
+          <div className="label">
+            {COMPROBANTE_LABEL[b.tipo]} {proximo && <span className="mono">{proximo}</span>} · Precio {b.nivel}
+          </div>
           <div className="monto">{money(total)}</div>
           <div className="small muted">{b.lineas.length} productos · {qty(unidades)} unidades</div>
           {b.descuento > 0 && (
@@ -272,14 +298,14 @@ export default function Venta() {
               <b>{b.cliente?.nombre ?? 'Público general'}</b>
               {b.cliente?.numeroDoc && <div className="small mono muted">{b.cliente.tipoDoc} {b.cliente.numeroDoc}</div>}
             </div>
-            <button className="btn btn-sm" onClick={() => setEligiendoCliente(true)}>Cambiar</button>
+            <button className="btn btn-sm" onClick={() => setEligiendoCliente(true)}>Cambiar <Kbd>F7</Kbd></button>
           </div>
-          <button className="btn" onClick={pedirDescuento} disabled={!b.lineas.length}>Aplicar descuento</button>
+          <button className="btn" onClick={pedirDescuento} disabled={!b.lineas.length}>Aplicar descuento <Kbd>F8</Kbd></button>
         </div>
         <button className="btn btn-primary btn-cobrar" disabled={!b.lineas.length || total <= 0} onClick={() => setCobrando(true)}>
           Cobrar <Kbd>F9</Kbd>
         </button>
-        <button className="btn" disabled={!b.lineas.length} onClick={() => window.confirm('¿Cancelar la venta en curso?') && limpiar()}>Cancelar venta</button>
+        <button className="btn" disabled={!b.lineas.length} onClick={cancelar}>Cancelar venta <Kbd>F10</Kbd></button>
         <div className="small muted" style={{ textAlign: 'center' }}>
           Caja #{caja.id} abierta por {caja.usuarioApertura.nombre}
         </div>

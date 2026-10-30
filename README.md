@@ -103,6 +103,9 @@ Variables opcionales: `SUNAT_URL` (otro servicio, por ejemplo uno de pruebas), `
 - Los productos que controlan vencimiento se venden primero de los lotes que vencen antes.
 - La boleta libre se imprime como "NOTA DE VENTA" porque no es un comprobante de SUNAT.
 - Al importar desde SysVent, las presentaciones que comparten Id (por ejemplo, unidad y bolsa) quedan como productos distintos, cada uno con su código y stock. Los stocks negativos se cargan en 0 y quedan marcados "Por revisar".
+- Para poner los costos, exporta de SysVent el "Reporte de stock valorizado" en CSV y corre en `backend`:
+  `npm run importar:costos -- "C:\ruta\stock_producto.csv"`. Agrega `--probar` para ver los cambios sin guardar y `--stock` para igualar también el stock (la diferencia queda como ajuste en el kardex). Se puede repetir cuando quieras.
+- En la venta: `F2` buscar, `F4` boleta / libre, `F6` precio, `F7` cliente, `F8` descuento, `F9` cobrar, `F10` cancelar, `F11` reimprimir. En el cobro: `F1` efectivo, `F2` Yape, `F3` Plin, `F4` tarjeta (llenan lo que falta), `Enter` confirma, `Esc` vuelve.
 
 ## Pruebas
 

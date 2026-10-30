@@ -1,7 +1,7 @@
-import { KeyboardEvent, useState } from 'react';
+import { KeyboardEvent, useRef, useState } from 'react';
 import { money, n } from '../format';
 import { MEDIO_LABEL, MedioPago } from '../types';
-import { Modal } from './ui';
+import { Kbd, Modal, useAtajos } from './ui';
 
 export interface PagoVenta {
   medioPago: MedioPago;
@@ -11,6 +11,8 @@ export interface PagoVenta {
 
 const OTROS: MedioPago[] = ['YAPE', 'PLIN', 'TARJETA'];
 const BILLETES = [10, 20, 50, 100, 200];
+/** Tecla de cada medio de pago dentro del modal. */
+const TECLA: Record<string, string> = { EFECTIVO: 'F1', YAPE: 'F2', PLIN: 'F3', TARJETA: 'F4' };
 const r2 = (x: number) => Math.round(x * 100) / 100;
 
 export default function CobroModal({
@@ -43,10 +45,31 @@ export default function CobroModal({
   const valido = falta <= 0 && sumaOtros <= total && vuelto <= efectivoUsado;
 
   const setOtro = (m: string, k: 'monto' | 'op', v: string) => setOtros((o) => ({ ...o, [m]: { ...o[m], [k]: v } }));
-  const todoCon = (m: MedioPago) => {
-    setOtros(Object.fromEntries(OTROS.map((x) => [x, { monto: x === m ? String(total) : '', op: otros[x].op }])));
-    setEfectivo('0');
+
+  const campos = useRef<Partial<Record<MedioPago, HTMLInputElement | null>>>({});
+  const enfocar = (m: MedioPago) =>
+    setTimeout(() => {
+      campos.current[m]?.focus();
+      campos.current[m]?.select();
+    }, 0);
+
+  /**
+   * Elige un medio de pago con su tecla o su botón. Yape, Plin y tarjeta se llenan con lo que falta
+   * (todo el total si aún no se escribió efectivo); el efectivo queda en "exacto" para escribir lo recibido.
+   */
+  const elegir = (m: MedioPago) => {
+    if (m === 'EFECTIVO') {
+      setEfectivo('');
+    } else {
+      const efectivoEscrito = efectivo === '' ? 0 : n(efectivo);
+      const otrosSinEste = OTROS.filter((x) => x !== m).reduce((s, x) => s + n(otros[x].monto), 0);
+      setOtro(m, 'monto', String(Math.max(0, r2(total - efectivoEscrito - otrosSinEste))));
+      if (efectivo === '') setEfectivo('0');
+    }
+    enfocar(m);
   };
+
+  useAtajos(Object.fromEntries(Object.entries(TECLA).map(([m, tecla]) => [tecla, () => elegir(m as MedioPago)])), { enModal: true });
 
   const confirmar = () => {
     if (!valido || enviando) return;
@@ -76,7 +99,7 @@ export default function CobroModal({
       pie={
         <>
           <label className="check grow"><input type="checkbox" checked={imprimir} onChange={(e) => setImprimir(e.target.checked)} /> Imprimir ticket</label>
-          <button className="btn" onClick={onClose}>Volver</button>
+          <button className="btn" onClick={onClose}>Volver <Kbd>Esc</Kbd></button>
           <button className="btn btn-primary" onClick={confirmar} disabled={!valido || enviando} style={{ minWidth: 160 }}>
             {enviando ? 'Guardando…' : <>Confirmar <span className="kbd">Enter</span></>}
           </button>
@@ -86,8 +109,11 @@ export default function CobroModal({
       <div className="stack" onKeyDown={enter}>
         <div className="stack" style={{ gap: 8 }}>
           <div className="pago-fila">
-            <b>Efectivo</b>
+            <button className="btn btn-ghost btn-sm medio" onClick={() => elegir('EFECTIVO')} title="Cobrar en efectivo">
+              <b>Efectivo</b> <Kbd>{TECLA.EFECTIVO}</Kbd>
+            </button>
             <input
+              ref={(el) => (campos.current.EFECTIVO = el)}
               className="num"
               type="number"
               step="0.1"
@@ -106,10 +132,10 @@ export default function CobroModal({
           </div>
           {OTROS.map((m) => (
             <div key={m} className="pago-fila">
-              <button className="btn btn-ghost btn-sm" style={{ justifyContent: 'flex-start' }} onClick={() => todoCon(m)} title={`Cobrar todo con ${MEDIO_LABEL[m]}`}>
-                {MEDIO_LABEL[m]}
+              <button className="btn btn-ghost btn-sm medio" onClick={() => elegir(m)} title={`Cobrar lo que falta con ${MEDIO_LABEL[m]}`}>
+                {MEDIO_LABEL[m]} <Kbd>{TECLA[m]}</Kbd>
               </button>
-              <input className="num" type="number" step="0.1" min="0" placeholder="0.00" value={otros[m].monto} onChange={(e) => setOtro(m, 'monto', e.target.value)} />
+              <input ref={(el) => (campos.current[m] = el)} className="num" type="number" step="0.1" min="0" placeholder="0.00" value={otros[m].monto} onChange={(e) => setOtro(m, 'monto', e.target.value)} />
               <input className="mono" placeholder="N.º operación (opcional)" value={otros[m].op} onChange={(e) => setOtro(m, 'op', e.target.value)} disabled={!n(otros[m].monto)} />
             </div>
           ))}
@@ -130,6 +156,9 @@ export default function CobroModal({
               <div className="vuelto" style={{ color: 'var(--ok)' }}>{money(vuelto)}</div>
             </div>
           )}
+        </div>
+        <div className="small muted">
+          <Kbd>F1</Kbd> efectivo · <Kbd>F2</Kbd> Yape · <Kbd>F3</Kbd> Plin · <Kbd>F4</Kbd> tarjeta llenan lo que falta · <Kbd>Enter</Kbd> confirma
         </div>
         {sumaOtros > total && <div className="alert danger">Yape, Plin y tarjeta no pueden superar el total.</div>}
       </div>
