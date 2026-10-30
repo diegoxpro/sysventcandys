@@ -3,7 +3,9 @@
 // cuentas por pagar, lotes/vencimientos, mermas y movimientos de stock.
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // "windows" para armar el instalador de la tienda desde cualquier PC.
+  binaryTargets = ["native", "windows"]
 }
 
 datasource db {
