@@ -1,6 +1,7 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
+import { BORRADOR_COMPRA, borrarBorrador, guardarBorrador, leerBorrador } from '../borrador';
 import BuscadorProducto from '../components/BuscadorProducto';
 import ProveedorForm from '../components/ProveedorForm';
 import SugerenciasModal from '../components/SugerenciasModal';
@@ -21,13 +22,8 @@ function enDias(dias: number) {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 }
 
-export default function NuevaCompra() {
-  const avisar = useToast();
-  const navegar = useNavigate();
-  const buscador = useRef<HTMLInputElement>(null);
-  const { data: proveedores, setData: setProveedores } = useCarga(() => api<Proveedor[]>('/proveedores'), []);
-  const [nuevoProveedor, setNuevoProveedor] = useState(false);
-  const [cab, setCab] = useState({
+function cabeceraVacia() {
+  return {
     proveedorId: '',
     tipoDocumento: 'FACTURA' as TipoDoc,
     serie: '',
@@ -37,11 +33,48 @@ export default function NuevaCompra() {
     fechaVencimiento: enDias(15),
     medioPago: 'EFECTIVO' as MedioPago,
     observacion: '',
-  });
-  const [lineas, setLineas] = useState<Linea[]>([]);
+  };
+}
+type Cabecera = ReturnType<typeof cabeceraVacia>;
+
+interface Borrador {
+  cab: Cabecera;
+  lineas: Linea[];
+}
+
+/** Hay borrador cuando ya se escribió algo de la factura o se agregó algún producto. */
+export function hayBorradorCompra() {
+  const b = leerBorrador<Borrador>(BORRADOR_COMPRA);
+  return !!(b?.lineas?.length || b?.cab?.proveedorId || b?.cab?.serie || b?.cab?.numero);
+}
+
+export default function NuevaCompra() {
+  const avisar = useToast();
+  const navegar = useNavigate();
+  const buscador = useRef<HTMLInputElement>(null);
+  const { data: proveedores, setData: setProveedores } = useCarga(() => api<Proveedor[]>('/proveedores'), []);
+  const [nuevoProveedor, setNuevoProveedor] = useState(false);
+  // La compra en curso se recupera al volver al módulo, recargar o reabrir el navegador.
+  const [inicial] = useState(() => (hayBorradorCompra() ? leerBorrador<Borrador>(BORRADOR_COMPRA) : null));
+  const [cab, setCab] = useState<Cabecera>(() => ({ ...cabeceraVacia(), ...inicial?.cab }));
+  const [lineas, setLineas] = useState<Linea[]>(() => inicial?.lineas ?? []);
+  const [recuperado, setRecuperado] = useState(!!inicial);
+  const terminado = useRef(false);
   const [enviando, setEnviando] = useState(false);
   const [resultado, setResultado] = useState<{ compra: Compra; sugerencias: Sugerencia[] } | null>(null);
   const setC = (k: keyof typeof cab, v: string) => setCab((x) => ({ ...x, [k]: v }));
+
+  useEffect(() => {
+    if (!terminado.current) guardarBorrador(BORRADOR_COMPRA, { cab, lineas });
+  }, [cab, lineas]);
+
+  const descartar = () => {
+    if (!window.confirm('¿Descartar el borrador y empezar una compra nueva?')) return;
+    borrarBorrador(BORRADOR_COMPRA);
+    setCab(cabeceraVacia());
+    setLineas([]);
+    setRecuperado(false);
+  };
 
   const agregar = (p: Producto) => {
     setLineas((ls) => {
@@ -88,6 +121,8 @@ export default function NuevaCompra() {
           })),
         },
       });
+      terminado.current = true;
+      borrarBorrador(BORRADOR_COMPRA);
       avisar(`Compra registrada: ${money(r.compra.total)}`);
       if (r.sugerencias.length) setResultado(r);
       else navegar(`/compras/${r.compra.id}`);
@@ -111,6 +146,13 @@ export default function NuevaCompra() {
           <p>Ingresa la factura del proveedor. El stock y el costo se actualizan al guardar.</p>
         </div>
       </div>
+
+      {recuperado && (
+        <div className="card card-pad row" style={{ justifyContent: 'space-between' }}>
+          <span>Recuperaste la compra que estabas registrando. Se guarda sola mientras la llenas.</span>
+          <button className="btn btn-sm" onClick={descartar}>Descartar borrador</button>
+        </div>
+      )}
 
       <div className="card card-pad">
         <div className="grid-4">
@@ -224,7 +266,8 @@ export default function NuevaCompra() {
               <span className="muted">Total</span>
               <span className="big">{money(total)}</span>
             </div>
-            <button className="btn" onClick={() => navegar('/compras')}>Cancelar</button>
+            <button className="btn" onClick={() => navegar('/compras')} title="El borrador queda guardado para continuar después">Salir</button>
+            <button className="btn" onClick={descartar} disabled={!lineas.length && !cab.proveedorId && !cab.serie && !cab.numero}>Descartar</button>
             <button className="btn btn-primary" onClick={guardar} disabled={enviando || faltan.length > 0}>
               {enviando ? 'Guardando…' : <>Guardar compra <Kbd>F9</Kbd></>}
             </button>

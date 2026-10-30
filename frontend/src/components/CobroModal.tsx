@@ -1,4 +1,4 @@
-import { KeyboardEvent, useRef, useState } from 'react';
+import { KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { money, n } from '../format';
 import { MEDIO_LABEL, MedioPago } from '../types';
 import { Kbd, Modal, useAtajos } from './ui';
@@ -22,6 +22,7 @@ export default function CobroModal({
   onConfirmar,
   inicial,
   titulo,
+  onCambio,
 }: {
   total: number;
   enviando: boolean;
@@ -30,6 +31,8 @@ export default function CobroModal({
   /** Pagos con los que se abre el modal, al corregir una venta ya hecha. */
   inicial?: PagoVenta[];
   titulo?: string;
+  /** Avisa los pagos escritos hasta ahora, para guardarlos como borrador. */
+  onCambio?: (pagos: PagoVenta[]) => void;
 }) {
   const [efectivo, setEfectivo] = useState(() => {
     const e = inicial?.filter((p) => p.medioPago === 'EFECTIVO').reduce((s, p) => s + p.monto, 0) ?? 0;
@@ -86,6 +89,15 @@ export default function CobroModal({
 
   useAtajos(Object.fromEntries(Object.entries(TECLA).map(([m, tecla]) => [tecla, () => elegir(m as MedioPago)])), { enModal: true });
 
+  const pagos: PagoVenta[] = [
+    ...(efectivoUsado > 0 ? [{ medioPago: 'EFECTIVO' as MedioPago, monto: efectivoUsado }] : []),
+    ...OTROS.filter((m) => n(otros[m].monto) > 0).map((m) => ({ medioPago: m, monto: n(otros[m].monto), numeroOperacion: otros[m].op.trim() || undefined })),
+  ];
+  const clavePagos = JSON.stringify(pagos);
+  const avisarCambio = useRef(onCambio);
+  avisarCambio.current = onCambio;
+  useEffect(() => avisarCambio.current?.(JSON.parse(clavePagos)), [clavePagos]);
+
   const confirmar = () => {
     if (!valido || enviando) return;
     try {
@@ -93,10 +105,6 @@ export default function CobroModal({
     } catch {
       /* sin almacenamiento: no pasa nada */
     }
-    const pagos: PagoVenta[] = [
-      ...(efectivoUsado > 0 ? [{ medioPago: 'EFECTIVO' as MedioPago, monto: efectivoUsado }] : []),
-      ...OTROS.filter((m) => n(otros[m].monto) > 0).map((m) => ({ medioPago: m, monto: n(otros[m].monto), numeroOperacion: otros[m].op.trim() || undefined })),
-    ];
     onConfirmar(pagos, imprimir);
   };
 
