@@ -11,6 +11,7 @@
     "db:migrate:dev": "prisma migrate dev",
     "db:seed": "ts-node prisma/seed.ts",
     "importar:sysvent": "ts-node scripts/importar-sysvent.ts",
+    "importar:costos": "ts-node scripts/actualizar-costos.ts",
     "test": "jest",
     "lint": "tsc --noEmit"
   },
