@@ -16,6 +16,9 @@ const TRAZOS = {
   alerta: 'M12 3 2 20h20L12 3ZM12 10v4M12 17h.01',
   ok: 'M5 12.5 10 17l9-10',
   mas: 'M12 5v14M5 12h14',
+  flecha: 'M9 6l6 6-6 6',
+  lista: 'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01',
+  kardex: 'M5 3h14v18H5zM9 7h6M9 11h6M9 15h3',
 } as const;
 
 export type NombreIcono = keyof typeof TRAZOS;

@@ -97,6 +97,22 @@ a { color: var(--accent); }
 .nav a:focus-visible { outline: 2px solid #f783ac; outline-offset: -2px; }
 .nav a:hover { background: rgb(255 255 255 / 7%); }
 .nav a.active { background: rgb(255 255 255 / 12%); color: #fff; font-weight: 600; }
+.nav { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; min-height: 0; }
+.nav-titulo {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  margin-top: 8px; padding: 8px 10px; border: 0; border-radius: var(--radius-sm);
+  background: none; color: #a8a29a; font: inherit; font-size: 12px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .06em; text-align: left; cursor: pointer;
+}
+.nav-titulo:hover { background: rgb(255 255 255 / 7%); color: #e9e6e1; }
+.nav-titulo.activa { color: #fff; }
+.nav-titulo:focus-visible { outline: 2px solid #f783ac; outline-offset: -2px; }
+.nav-titulo .icono { color: #8b857b; }
+.nav-flecha { transition: transform .15s var(--ease); }
+.nav-flecha.abierta { transform: rotate(90deg); }
+.nav-sub { display: flex; flex-direction: column; gap: 2px; padding-left: 12px; margin-left: 14px; border-left: 1px solid rgb(255 255 255 / 10%); }
+.nav-sub a { padding: 6px 10px; font-size: 14px; }
+.nav-seccion + a { margin-top: 8px; }
 .nav .pill { background: var(--accent); color: #fff; border-radius: 10px; padding: 0 7px; font-size: 11px; font-weight: 700; }
 .sidebar-foot { margin-top: auto; padding: 12px 4px 0; border-top: 1px solid rgb(255 255 255 / 10%); font-size: 13px; display: flex; align-items: center; gap: 10px; }
 .avatar { width: 32px; height: 32px; border-radius: 50%; background: rgb(255 255 255 / 10%); display: grid; place-items: center; font-weight: 700; color: #fff; flex: none; }
@@ -270,6 +286,8 @@ td.actions { text-align: right; white-space: nowrap; }
   .app { grid-template-columns: 1fr; }
   .sidebar { position: static; height: auto; flex-direction: row; flex-wrap: wrap; }
   .nav-group, .sidebar-foot { display: none; }
+  .nav { flex-direction: row; flex-wrap: wrap; overflow: visible; }
+  .nav-sub { flex-direction: row; flex-wrap: wrap; border-left: 0; margin-left: 0; padding-left: 0; }
   .main { padding: 16px; }
   .grid-3, .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

@@ -18,17 +18,46 @@ const margen = (utilidad: number, venta: number) => (venta > 0 ? Math.round((uti
 const MEDIO: Record<string, string> = { EFECTIVO: 'Efectivo', TARJETA: 'Tarjeta', YAPE: 'Yape', PLIN: 'Plin', TRANSFERENCIA: 'Transferencia' };
 const COMPROBANTE: Record<string, string> = { BOLETA: 'BOLETA DE VENTA', BOLETA_LIBRE: 'BOLETA VENTA LIBRE' };
 
+export type CategoriaReporte = 'ventas' | 'compras' | 'kardex';
+interface DefReporte {
+  titulo: string;
+  categoria: CategoriaReporte;
+  /** false: no pide período (foto del momento). */
+  usaFechas?: boolean;
+  /** Pide elegir un producto. */
+  requiereProducto?: boolean;
+}
+
 export const REPORTES = {
-  'ventas-resumido': 'Ventas resumido',
-  'ventas-por-producto': 'Ventas por producto',
-  'ventas-por-dia': 'Ventas por día',
-  'ventas-por-medio': 'Ventas por medio de pago',
-  'ventas-por-cajero': 'Ventas por cajero',
-  utilidad: 'Utilidad del período',
-  compras: 'Compras por proveedor',
-  'stock-valorizado': 'Stock valorizado',
-} as const;
+  'ventas-resumido': { titulo: 'Ventas resumido', categoria: 'ventas' },
+  'ventas-por-producto': { titulo: 'Ventas por producto', categoria: 'ventas' },
+  'ventas-por-dia': { titulo: 'Ventas por día', categoria: 'ventas' },
+  'ventas-por-medio': { titulo: 'Ventas por medio de pago', categoria: 'ventas' },
+  'ventas-por-cajero': { titulo: 'Ventas por cajero', categoria: 'ventas' },
+  utilidad: { titulo: 'Utilidad del período', categoria: 'ventas' },
+  'compras-detallado': { titulo: 'Compras por documento', categoria: 'compras' },
+  compras: { titulo: 'Compras por proveedor', categoria: 'compras' },
+  'compras-por-producto': { titulo: 'Compras por producto', categoria: 'compras' },
+  'compras-por-dia': { titulo: 'Compras por día', categoria: 'compras' },
+  'pagos-proveedores': { titulo: 'Pagos a proveedores', categoria: 'compras' },
+  kardex: { titulo: 'Kardex por producto', categoria: 'kardex', requiereProducto: true },
+  'kardex-resumen': { titulo: 'Kardex resumen (todos los productos)', categoria: 'kardex' },
+  'stock-valorizado': { titulo: 'Stock valorizado', categoria: 'kardex', usaFechas: false },
+} satisfies Record<string, DefReporte>;
 export type NombreReporte = keyof typeof REPORTES;
+export const defReporte = (n: NombreReporte): DefReporte => REPORTES[n];
+
+const TIPO_DOC: Record<string, string> = { FACTURA: 'Factura', BOLETA: 'Boleta', GUIA: 'Guía', NOTA_VENTA: 'Nota de venta' };
+const CONDICION: Record<string, string> = { CONTADO: 'Contado', CREDITO: 'Crédito' };
+const MOVIMIENTO: Record<string, string> = {
+  IMPORTACION: 'Stock inicial',
+  COMPRA: 'Compra',
+  ANULACION_COMPRA: 'Anulación de compra',
+  VENTA: 'Venta',
+  ANULACION_VENTA: 'Anulación de venta',
+  MERMA: 'Merma',
+  AJUSTE: 'Ajuste',
+};
 
 @Injectable()
 export class ReportesService {
@@ -44,7 +73,7 @@ export class ReportesService {
     return { desde: d, hasta: h, etiqueta: `Desde ${fmt(desde)} hasta ${fmt(hasta)}` };
   }
 
-  generar(nombre: NombreReporte, f: Filtro): Promise<Reporte> {
+  generar(nombre: NombreReporte, f: Filtro, productoId?: number): Promise<Reporte> {
     switch (nombre) {
       case 'ventas-resumido':
         return this.ventasResumido(f);
@@ -60,6 +89,19 @@ export class ReportesService {
         return this.utilidad(f);
       case 'compras':
         return this.compras(f);
+      case 'compras-detallado':
+        return this.comprasDetallado(f);
+      case 'compras-por-producto':
+        return this.comprasPorProducto(f);
+      case 'compras-por-dia':
+        return this.comprasPorDia(f);
+      case 'pagos-proveedores':
+        return this.pagosProveedores(f);
+      case 'kardex':
+        if (!productoId) throw new BadRequestException('Elige un producto');
+        return this.kardex(f, productoId);
+      case 'kardex-resumen':
+        return this.kardexResumen(f);
       case 'stock-valorizado':
         return this.stockValorizado();
       default:
@@ -280,6 +322,253 @@ export class ReportesService {
       ],
       filas,
       totales: suma(filas, 'compras', 'total', 'pagado', 'saldo'),
+    };
+  }
+
+  /** Una fila por factura o documento del proveedor, incluidas las anuladas. */
+  private async comprasDetallado(f: Filtro): Promise<Reporte> {
+    const compras = await this.prisma.compra.findMany({
+      where: { fechaEmision: { gte: f.desde, lt: f.hasta } },
+      include: { proveedor: true, usuario: { select: { nombre: true } }, _count: { select: { items: true } } },
+      orderBy: [{ fechaEmision: 'asc' }, { id: 'asc' }],
+    });
+    const filas = compras.map((c) => {
+      const anulada = c.estado !== 'REGISTRADA';
+      const total = anulada ? 0 : r2(c.total);
+      const saldo = anulada ? 0 : r2(c.saldo);
+      return {
+        fecha: c.fechaEmision.toISOString().slice(0, 10),
+        documento: `${TIPO_DOC[c.tipoDocumento] ?? c.tipoDocumento} ${c.serie}-${c.numero}`,
+        ruc: c.proveedor.ruc,
+        proveedor: c.proveedor.nombreComercial ?? c.proveedor.razonSocial,
+        condicion: CONDICION[c.condicion] ?? c.condicion,
+        vence: c.fechaVencimiento ? c.fechaVencimiento.toISOString().slice(0, 10) : null,
+        items: c._count.items,
+        estado: anulada ? 'ANULADA' : saldo > 0 ? 'Pendiente' : 'Pagada',
+        registro: c.usuario.nombre,
+        total,
+        pagado: r2(total - saldo),
+        saldo,
+      };
+    });
+    const anuladas = filas.filter((x) => x.estado === 'ANULADA').length;
+    return {
+      titulo: 'Compras por documento',
+      subtitulo: `${f.etiqueta} · por fecha de emisión${anuladas ? ` · ${anuladas} anuladas (no suman)` : ''}`,
+      columnas: [
+        { clave: 'fecha', titulo: 'Emisión', tipo: 'fecha' },
+        { clave: 'documento', titulo: 'Documento' },
+        { clave: 'ruc', titulo: 'RUC' },
+        { clave: 'proveedor', titulo: 'Proveedor' },
+        { clave: 'condicion', titulo: 'Condición' },
+        { clave: 'vence', titulo: 'Vence', tipo: 'fecha' },
+        { clave: 'items', titulo: 'Ítems', tipo: 'numero' },
+        { clave: 'estado', titulo: 'Estado' },
+        { clave: 'registro', titulo: 'Registró' },
+        { clave: 'total', titulo: 'Total', tipo: 'moneda' },
+        { clave: 'pagado', titulo: 'Pagado', tipo: 'moneda' },
+        { clave: 'saldo', titulo: 'Saldo', tipo: 'moneda' },
+      ],
+      filas,
+      totales: suma(filas, 'total', 'pagado', 'saldo'),
+    };
+  }
+
+  private async comprasPorProducto(f: Filtro): Promise<Reporte> {
+    const rows = await this.prisma.$queryRaw<{ codigo: string | null; producto: string; unidades: number; importe: number; compras: number; ultimo: number }[]>`
+      SELECT p."codigoBarra" AS codigo, p.nombre AS producto,
+             SUM(i.cantidad * i.factor)::float AS unidades, SUM(i.subtotal)::float AS importe,
+             COUNT(DISTINCT c.id)::int AS compras, p.costo::float AS ultimo
+      FROM "CompraItem" i JOIN "Compra" c ON c.id = i."compraId" JOIN "Producto" p ON p.id = i."productoId"
+      WHERE c.estado = 'REGISTRADA' AND c."fechaEmision" >= ${f.desde} AND c."fechaEmision" < ${f.hasta}
+      GROUP BY p.id ORDER BY importe DESC`;
+    const filas = rows.map((r) => ({
+      ...r,
+      importe: r2(r.importe),
+      promedio: r.unidades ? Math.round((r.importe / r.unidades) * 10000) / 10000 : 0,
+    }));
+    return {
+      titulo: 'Compras por producto',
+      subtitulo: `${f.etiqueta} · unidades y costo por unidad (las presentaciones se cuentan en unidades)`,
+      columnas: [
+        { clave: 'codigo', titulo: 'Código' },
+        { clave: 'producto', titulo: 'Producto' },
+        { clave: 'compras', titulo: 'N.º compras', tipo: 'numero' },
+        { clave: 'unidades', titulo: 'Unidades', tipo: 'numero' },
+        { clave: 'importe', titulo: 'Importe', tipo: 'moneda' },
+        { clave: 'promedio', titulo: 'Costo prom. unidad', tipo: 'moneda' },
+        { clave: 'ultimo', titulo: 'Costo actual', tipo: 'moneda' },
+      ],
+      filas,
+      totales: suma(filas, 'unidades', 'importe'),
+    };
+  }
+
+  private async comprasPorDia(f: Filtro): Promise<Reporte> {
+    const rows = await this.prisma.$queryRaw<{ dia: Date; compras: number; contado: number; credito: number; total: number }[]>`
+      SELECT "fechaEmision" AS dia, COUNT(*)::int AS compras,
+             COALESCE(SUM(total) FILTER (WHERE condicion = 'CONTADO'), 0)::float AS contado,
+             COALESCE(SUM(total) FILTER (WHERE condicion = 'CREDITO'), 0)::float AS credito,
+             SUM(total)::float AS total
+      FROM "Compra" WHERE estado = 'REGISTRADA' AND "fechaEmision" >= ${f.desde} AND "fechaEmision" < ${f.hasta}
+      GROUP BY dia ORDER BY dia`;
+    const filas = rows.map((r) => ({ ...r, dia: r.dia.toISOString().slice(0, 10), contado: r2(r.contado), credito: r2(r.credito), total: r2(r.total) }));
+    return {
+      titulo: 'Compras por día',
+      subtitulo: `${f.etiqueta} · por fecha de emisión`,
+      columnas: [
+        { clave: 'dia', titulo: 'Día', tipo: 'fecha' },
+        { clave: 'compras', titulo: 'N.º compras', tipo: 'numero' },
+        { clave: 'contado', titulo: 'Contado', tipo: 'moneda' },
+        { clave: 'credito', titulo: 'Crédito', tipo: 'moneda' },
+        { clave: 'total', titulo: 'Total', tipo: 'moneda' },
+      ],
+      filas,
+      totales: suma(filas, 'compras', 'contado', 'credito', 'total'),
+    };
+  }
+
+  private async pagosProveedores(f: Filtro): Promise<Reporte> {
+    const pagos = await this.prisma.pagoProveedor.findMany({
+      where: { fecha: { gte: f.desde, lt: f.hasta } },
+      include: { compra: { include: { proveedor: true } }, usuario: { select: { nombre: true } } },
+      orderBy: { fecha: 'asc' },
+    });
+    const filas = pagos.map((p) => {
+      return {
+        fecha: p.fecha,
+        proveedor: p.compra.proveedor.nombreComercial ?? p.compra.proveedor.razonSocial,
+        documento: `${TIPO_DOC[p.compra.tipoDocumento] ?? p.compra.tipoDocumento} ${p.compra.serie}-${p.compra.numero}`,
+        medio: MEDIO[p.medioPago] ?? p.medioPago,
+        operacion: p.numeroOperacion ?? '',
+        usuario: p.usuario.nombre,
+        monto: r2(p.monto),
+      };
+    });
+    return {
+      titulo: 'Pagos a proveedores',
+      subtitulo: f.etiqueta,
+      columnas: [
+        { clave: 'fecha', titulo: 'Fecha', tipo: 'fechaHora' },
+        { clave: 'proveedor', titulo: 'Proveedor' },
+        { clave: 'documento', titulo: 'Documento' },
+        { clave: 'medio', titulo: 'Medio de pago' },
+        { clave: 'operacion', titulo: 'N.º operación' },
+        { clave: 'usuario', titulo: 'Usuario' },
+        { clave: 'monto', titulo: 'Monto', tipo: 'moneda' },
+      ],
+      filas,
+      totales: suma(filas, 'monto'),
+    };
+  }
+
+  /** Kardex en unidades de un producto: saldo inicial, cada movimiento y saldo final. */
+  private async kardex(f: Filtro, productoId: number): Promise<Reporte> {
+    const producto = await this.prisma.producto.findUnique({ where: { id: productoId } });
+    if (!producto) throw new BadRequestException('Producto no encontrado');
+    const [anterior, movs] = await Promise.all([
+      this.prisma.movimientoStock.findFirst({ where: { productoId, fecha: { lt: f.desde } }, orderBy: { id: 'desc' } }),
+      this.prisma.movimientoStock.findMany({
+        where: { productoId, fecha: { gte: f.desde, lt: f.hasta } },
+        include: { usuario: { select: { nombre: true } }, lote: { select: { codigo: true } } },
+        orderBy: { id: 'asc' },
+      }),
+    ]);
+    // Saldo antes del período: el último saldo anterior; si no hay, se deduce del primer movimiento.
+    const inicial = anterior
+      ? Number(anterior.stockResultante)
+      : movs.length
+        ? Number(movs[0].stockResultante) - Number(movs[0].cantidad)
+        : Number(producto.stock);
+    const filas: Record<string, unknown>[] = [
+      { fecha: f.desde, tipo: 'SALDO INICIAL', documento: '', detalle: '', usuario: '', entrada: null, salida: null, saldo: inicial, costo: null, valorEntrada: null, valorSalida: null },
+    ];
+    for (const m of movs) {
+      const cant = Number(m.cantidad);
+      const costo = Number(m.costoUnitario);
+      filas.push({
+        fecha: m.fecha,
+        tipo: MOVIMIENTO[m.tipo] ?? m.tipo,
+        documento: m.referencia ?? '',
+        detalle: [m.motivo, m.lote?.codigo ? `Lote ${m.lote.codigo}` : null].filter(Boolean).join(' · '),
+        usuario: m.usuario?.nombre ?? '',
+        entrada: cant > 0 ? cant : null,
+        salida: cant < 0 ? -cant : null,
+        saldo: Number(m.stockResultante),
+        costo,
+        valorEntrada: cant > 0 ? r2(cant * costo) : null,
+        valorSalida: cant < 0 ? r2(-cant * costo) : null,
+      });
+    }
+    const final = movs.length ? Number(movs[movs.length - 1].stockResultante) : inicial;
+    const tot = suma(filas, 'entrada', 'salida', 'valorEntrada', 'valorSalida');
+    return {
+      titulo: `Kardex: ${producto.nombre}`,
+      subtitulo: `${f.etiqueta}${producto.codigoBarra ? ` · código ${producto.codigoBarra}` : ''} · en unidades · saldo inicial ${inicial} · saldo final ${final} · costo actual S/ ${Number(producto.costo).toFixed(2)}`,
+      columnas: [
+        { clave: 'fecha', titulo: 'Fecha', tipo: 'fechaHora' },
+        { clave: 'tipo', titulo: 'Movimiento' },
+        { clave: 'documento', titulo: 'Documento' },
+        { clave: 'detalle', titulo: 'Detalle' },
+        { clave: 'usuario', titulo: 'Usuario' },
+        { clave: 'entrada', titulo: 'Entrada', tipo: 'numero' },
+        { clave: 'salida', titulo: 'Salida', tipo: 'numero' },
+        { clave: 'saldo', titulo: 'Saldo', tipo: 'numero' },
+        { clave: 'costo', titulo: 'Costo unit.', tipo: 'moneda' },
+        { clave: 'valorEntrada', titulo: 'Valor entrada', tipo: 'moneda' },
+        { clave: 'valorSalida', titulo: 'Valor salida', tipo: 'moneda' },
+      ],
+      filas,
+      totales: { ...tot, saldo: final },
+    };
+  }
+
+  /** Por producto con movimientos en el período: saldo inicial, entradas y salidas por tipo, saldo final. */
+  private async kardexResumen(f: Filtro): Promise<Reporte> {
+    const rows = await this.prisma.$queryRaw<
+      { codigo: string | null; producto: string; inicial: number; compras: number; ventas: number; mermas: number; otrasEntradas: number; otrasSalidas: number; final: number; costo: number }[]
+    >`
+      WITH m AS (
+        SELECT * FROM "MovimientoStock" WHERE fecha >= ${f.desde} AND fecha < ${f.hasta}
+      ), primero AS (
+        SELECT DISTINCT ON ("productoId") "productoId", "stockResultante" - cantidad AS inicial FROM m ORDER BY "productoId", id
+      ), ultimo AS (
+        SELECT DISTINCT ON ("productoId") "productoId", "stockResultante" AS final FROM m ORDER BY "productoId", id DESC
+      ), sumas AS (
+        SELECT "productoId",
+               COALESCE(SUM(cantidad) FILTER (WHERE tipo IN ('COMPRA', 'ANULACION_COMPRA')), 0) AS compras,
+               COALESCE(SUM(-cantidad) FILTER (WHERE tipo IN ('VENTA', 'ANULACION_VENTA')), 0) AS ventas,
+               COALESCE(SUM(-cantidad) FILTER (WHERE tipo = 'MERMA'), 0) AS mermas,
+               COALESCE(SUM(cantidad) FILTER (WHERE tipo IN ('AJUSTE', 'IMPORTACION') AND cantidad > 0), 0) AS "otrasEntradas",
+               COALESCE(SUM(-cantidad) FILTER (WHERE tipo IN ('AJUSTE', 'IMPORTACION') AND cantidad < 0), 0) AS "otrasSalidas"
+        FROM m GROUP BY "productoId"
+      )
+      SELECT p."codigoBarra" AS codigo, p.nombre AS producto, pr.inicial::float AS inicial,
+             s.compras::float AS compras, s.ventas::float AS ventas, s.mermas::float AS mermas,
+             s."otrasEntradas"::float AS "otrasEntradas", s."otrasSalidas"::float AS "otrasSalidas",
+             u.final::float AS final, p.costo::float AS costo
+      FROM sumas s JOIN primero pr USING ("productoId") JOIN ultimo u USING ("productoId")
+      JOIN "Producto" p ON p.id = s."productoId"
+      ORDER BY p.nombre`;
+    const filas = rows.map((r) => ({ ...r, valor: r2(r.final * r.costo) }));
+    return {
+      titulo: 'Kardex resumen',
+      subtitulo: `${f.etiqueta} · en unidades · solo productos con movimientos en el período · ventas y compras ya restan sus anulaciones · valor al costo actual`,
+      columnas: [
+        { clave: 'codigo', titulo: 'Código' },
+        { clave: 'producto', titulo: 'Producto' },
+        { clave: 'inicial', titulo: 'Saldo inicial', tipo: 'numero' },
+        { clave: 'compras', titulo: 'Compras', tipo: 'numero' },
+        { clave: 'otrasEntradas', titulo: 'Carga y ajustes +', tipo: 'numero' },
+        { clave: 'ventas', titulo: 'Ventas', tipo: 'numero' },
+        { clave: 'mermas', titulo: 'Mermas', tipo: 'numero' },
+        { clave: 'otrasSalidas', titulo: 'Ajustes −', tipo: 'numero' },
+        { clave: 'final', titulo: 'Saldo final', tipo: 'numero' },
+        { clave: 'costo', titulo: 'Costo actual', tipo: 'moneda' },
+        { clave: 'valor', titulo: 'Valor final', tipo: 'moneda' },
+      ],
+      filas,
+      totales: suma(filas, 'compras', 'otrasEntradas', 'ventas', 'mermas', 'otrasSalidas', 'valor'),
     };
   }
 

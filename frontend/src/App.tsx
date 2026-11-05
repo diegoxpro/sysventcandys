@@ -33,7 +33,14 @@ export default function App() {
         <Route path="venta" element={<Venta />} />
         <Route path="caja" element={<Caja />} />
         <Route path="ventas" element={<Ventas />} />
-        {esAdmin && <Route path="reportes" element={<Reportes />} />}
+        {esAdmin && (
+          <>
+            <Route path="reportes" element={<Navigate to="/reportes/ventas" replace />} />
+            <Route path="reportes/ventas" element={<Reportes key="ventas" categoria="ventas" />} />
+            <Route path="reportes/compras" element={<Reportes key="compras" categoria="compras" />} />
+            <Route path="reportes/kardex" element={<Reportes key="kardex" categoria="kardex" />} />
+          </>
+        )}
         <Route path="productos" element={<Productos />} />
         <Route path="inventario" element={<Inventario />} />
         <Route path="compras" element={<Compras />} />

@@ -30,7 +30,8 @@ const FORMATO: Partial<Record<TipoColumna, string>> = {
 
 export async function reporteAExcel(r: Reporte, empresa: string): Promise<Buffer> {
   const libro = new ExcelJS.Workbook();
-  const hoja = libro.addWorksheet(r.titulo.slice(0, 31));
+  // Excel no acepta * ? : \ / [ ] en el nombre de la hoja (p. ej. "COCA COLA 2,25 LITROS**").
+  const hoja = libro.addWorksheet(r.titulo.replace(/[*?:\\/[\]]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 31) || 'Reporte');
   hoja.addRow([empresa]).font = { bold: true, size: 13 };
   hoja.addRow([r.titulo]).font = { bold: true };
   if (r.subtitulo) hoja.addRow([r.subtitulo]);
