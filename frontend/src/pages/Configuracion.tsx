@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { Campo, Modal, useCarga, useToast } from '../components/ui';
+import ImportarProductos from './ImportarProductos';
 import { fecha, fechaHora, n, precioSugerido } from '../format';
 import { Configuracion as Config, EstadoBackup, EstadoSunatGeneral, Rol, Serie, SUNAT_LABEL, Usuario } from '../types';
 
@@ -14,6 +15,7 @@ export default function Configuracion() {
       {esAdmin && (
         <div className="tabs">
           <button className={tab === 'preferencias' ? 'active' : ''} onClick={() => setTab('preferencias')}>Preferencias</button>
+          <button className={tab === 'importar' ? 'active' : ''} onClick={() => setTab('importar')}>Importar productos</button>
           <button className={tab === 'series' ? 'active' : ''} onClick={() => setTab('series')}>Comprobantes</button>
           <button className={tab === 'usuarios' ? 'active' : ''} onClick={() => setTab('usuarios')}>Usuarios</button>
           <button className={tab === 'sunat' ? 'active' : ''} onClick={() => setTab('sunat')}>SUNAT</button>
@@ -22,6 +24,7 @@ export default function Configuracion() {
         </div>
       )}
       {tab === 'preferencias' && <Preferencias />}
+      {tab === 'importar' && <ImportarProductos />}
       {tab === 'series' && <Series />}
       {tab === 'usuarios' && <Usuarios />}
       {tab === 'sunat' && <Sunat />}
