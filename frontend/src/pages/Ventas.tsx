@@ -99,10 +99,12 @@ export default function Ventas() {
   );
 }
 
+const RESULTADO_ENVIO = { ACEPTADO: 'aceptada', OBSERVADO: 'aceptada con observaciones', RECHAZADO: 'rechazada', ERROR: 'error de SUNAT' };
+
 function EstadoSunatBadge({ v }: { v: Venta }) {
   if (v.estadoSunat === 'NO_APLICA') return <span className="faint">—</span>;
   const e = SUNAT_LABEL[v.estadoSunat];
-  return <span className={`badge ${e.clase}`}>{e.texto}</span>;
+  return <span className={`badge ${e.clase}`} title={v.sunatEnviadoEn ? `Enviado el ${fechaHora(v.sunatEnviadoEn)}` : undefined}>{e.texto}</span>;
 }
 
 function DetalleVenta({ id, cfg, onClose, onCambio }: { id: number; cfg: Configuracion; onClose: () => void; onCambio: () => void }) {
@@ -177,7 +179,18 @@ function DetalleVenta({ id, cfg, onClose, onCambio }: { id: number; cfg: Configu
               <b>SUNAT: {SUNAT_LABEL[v.estadoSunat].texto}</b>
               {v.cdrMensaje && <> · {v.cdrCodigo && v.cdrCodigo !== '0' && <span className="mono">{v.cdrCodigo}</span>} {v.cdrMensaje}</>}
               {v.sunatError && !v.cdrMensaje && <div className="small">{v.sunatError}</div>}
-              {v.sunatEnviadoEn && <div className="small muted">Enviado el {fechaHora(v.sunatEnviadoEn)}</div>}
+              {v.envios?.length ? (
+                <div className="small muted">
+                  {v.envios.map((e) => (
+                    <div key={e.id}>
+                      Enviado el {fechaHora(e.fecha)} · {RESULTADO_ENVIO[e.resultado]}
+                      {e.resultado !== 'ACEPTADO' && e.codigo && <> · <span className="mono">{e.codigo}</span></>}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                v.sunatEnviadoEn && <div className="small muted">Enviado el {fechaHora(v.sunatEnviadoEn)}</div>
+              )}
               {v.estadoSunat === 'RECHAZADO' && <div className="small">Corrige el dato que indica SUNAT (por ejemplo, el documento del cliente) y reenvía, o anula la venta y emite una nueva.</div>}
               </div>
             </div>

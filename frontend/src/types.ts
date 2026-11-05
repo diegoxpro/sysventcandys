@@ -278,6 +278,7 @@ export interface Venta {
   pagos: { id: number; medioPago: MedioPago; monto: Dec; numeroOperacion: string | null }[];
   caja?: { estado: 'ABIERTA' | 'CERRADA' };
   ediciones?: { id: number; fecha: string; detalle: string; usuario: { nombre: string } }[];
+  envios?: { id: number; fecha: string; resultado: 'ACEPTADO' | 'OBSERVADO' | 'RECHAZADO' | 'ERROR'; codigo: string | null; mensaje: string | null }[];
 }
 
 export interface ResumenCaja {
