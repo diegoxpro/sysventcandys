@@ -104,7 +104,10 @@ export default function Caja() {
                   <td className="small">{fechaHora(h.fechaCierre)} · {h.usuarioCierre?.nombre}</td>
                   <td className="num">{money(h.efectivoEsperado)}</td>
                   <td className="num">{money(h.efectivoContado)}</td>
-                  <td className="num"><Diferencia v={n(h.diferencia)} /></td>
+                  <td className="num">
+                    <Diferencia v={n(h.diferencia)} />
+                    {h.sinCuadrar && <> <span className="badge danger" title="Se cerró marcando «cerrar aunque no cuadre»">Sin cuadrar</span></>}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -133,6 +136,11 @@ export default function Caja() {
           onClose={() => setViendo(null)}
           pie={<button className="btn" onClick={() => cfg && imprimirCierre(viendo, cfg)}>Imprimir</button>}
         >
+          {viendo.sinCuadrar && (
+            <div className="cuadre pendiente" role="status">
+              Esta caja se cerró sin cuadrar{viendo.resumen?.pendientes?.length ? `: ${viendo.resumen.pendientes.join(', ')}` : ''}.
+            </div>
+          )}
           <Resumen r={viendo.resumen!} />
           {viendo.observacion && <p>Observación: {viendo.observacion}</p>}
         </Modal>
@@ -316,6 +324,7 @@ function CierreModal({ caja, onClose, onListo }: { caja: TCaja; onClose: () => v
   const [digital, setDigital] = useState<Partial<Record<MedioPago, string>>>({});
   const [observacion, setObs] = useState('');
   const [enviando, setEnviando] = useState(false);
+  const [forzar, setForzar] = useState(false);
   const r = caja.resumen!;
   const total = r.totalPorMedio ?? r.porMedio;
   const contado = r2([...(denominaciones ?? [])].reduce((s, d) => s + d * n(conteo[String(d)]), 0));
@@ -325,6 +334,8 @@ function CierreModal({ caja, onClose, onListo }: { caja: TCaja; onClose: () => v
   const digitalNum = Object.fromEntries(aConfirmar.map((m) => [m, digital[m] == null || digital[m] === '' ? null : n(digital[m])])) as Partial<Record<MedioPago, number | null>>;
   const pendientes = aConfirmar.filter((m) => digitalNum[m] == null || !cuadra(n(digitalNum[m]) - n(total[m])));
   const cuadrada = cuadra(dif) && pendientes.length === 0;
+  // "Cerrar aunque no cuadre" exige explicar la diferencia en la observación.
+  const puedeCerrar = cuadrada || (forzar && observacion.trim() !== '');
 
   const siguiente = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== 'Enter') return;
@@ -334,7 +345,7 @@ function CierreModal({ caja, onClose, onListo }: { caja: TCaja; onClose: () => v
   };
 
   const cerrar = async () => {
-    if (!cuadrada) return;
+    if (!puedeCerrar) return;
     setEnviando(true);
     try {
       const c = await api<TCaja>('/caja/cerrar', {
@@ -342,9 +353,10 @@ function CierreModal({ caja, onClose, onListo }: { caja: TCaja; onClose: () => v
           conteo: Object.fromEntries(Object.entries(conteo).map(([k, v]) => [k, n(v)])),
           digital: digitalNum,
           observacion: observacion.trim() || undefined,
+          sinCuadrar: !cuadrada && forzar,
         },
       });
-      avisar('Caja cerrada');
+      avisar(cuadrada ? 'Caja cerrada' : 'Caja cerrada sin cuadrar; la diferencia quedó registrada');
       onListo(c);
     } catch (e) {
       avisar((e as Error).message, true);
@@ -366,11 +378,21 @@ function CierreModal({ caja, onClose, onListo }: { caja: TCaja; onClose: () => v
               : [
                   !cuadra(dif) && `El efectivo no cuadra: ${dif < 0 ? 'falta' : 'sobra'} ${money(Math.abs(dif))}.`,
                   pendientes.length > 0 && `Falta cuadrar ${pendientes.map((m) => MEDIO_LABEL[m]).join(', ')}.`,
-                  'Revisa el conteo o registra el gasto, ingreso o venta que falte.',
+                  forzar
+                    ? observacion.trim() ? 'Se cerrará con la diferencia registrada.' : 'Escribe en la observación el motivo de la diferencia.'
+                    : 'Revisa el conteo o registra el gasto, ingreso o venta que falte.',
                 ].filter(Boolean).join(' ')}
           </div>
+          {!cuadrada && (
+            <label className="check" style={{ whiteSpace: 'nowrap' }}>
+              <input type="checkbox" checked={forzar} onChange={(e) => setForzar(e.target.checked)} />
+              Cerrar aunque no cuadre
+            </label>
+          )}
           <button className="btn" onClick={onClose}>Volver</button>
-          <button className="btn btn-primary" onClick={cerrar} disabled={enviando || !cuadrada} title={cuadrada ? undefined : 'La caja debe estar cuadrada para cerrarla'}>
+          <button className="btn btn-primary" onClick={cerrar} disabled={enviando || !puedeCerrar}
+            title={puedeCerrar ? undefined : forzar ? 'Escribe el motivo en la observación' : 'Cuadra la caja o marca «Cerrar aunque no cuadre»'}
+          >
             Cerrar e imprimir
           </button>
         </>
@@ -431,7 +453,9 @@ function CierreModal({ caja, onClose, onListo }: { caja: TCaja; onClose: () => v
           <div className="card stat"><div className="label">Efectivo contado</div><div className="value">{money(contado)}</div></div>
           <div className="card stat"><div className="label">Efectivo en caja actual</div><div className="value" style={{ color: 'var(--accent)' }}>{money(r.efectivoEsperado)}</div></div>
         </div>
-        <Campo label="Observación"><input value={observacion} onChange={(e) => setObs(e.target.value)} /></Campo>
+        <Campo label={forzar && !cuadrada ? 'Observación (obligatoria: motivo de la diferencia)' : 'Observación'}>
+          <input value={observacion} onChange={(e) => setObs(e.target.value)} placeholder={forzar && !cuadrada ? 'Ej.: faltó S/ 2.00 por vuelto mal dado' : undefined} />
+        </Campo>
       </div>
     </Modal>
   );

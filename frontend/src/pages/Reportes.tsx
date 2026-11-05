@@ -6,7 +6,7 @@ import { Campo, useCarga, useToast, Vacio } from '../components/ui';
 import { fecha, fechaHora, hoyISO, money, qty } from '../format';
 import { Configuracion, Producto } from '../types';
 
-export type CategoriaReporte = 'ventas' | 'compras' | 'kardex';
+export type CategoriaReporte = 'ventas' | 'compras' | 'kardex' | 'sunat';
 interface InfoReporte {
   id: string;
   titulo: string;
@@ -18,6 +18,7 @@ const ENCABEZADO: Record<CategoriaReporte, { titulo: string; inicial: string; te
   ventas: { titulo: 'Reporte de venta', inicial: 'ventas-resumido', texto: 'Ventas, utilidad, medios de pago y cajeros del período.' },
   compras: { titulo: 'Reporte de compra', inicial: 'compras-detallado', texto: 'Facturas de proveedores, compras por producto y pagos realizados.' },
   kardex: { titulo: 'Reporte de kardex', inicial: 'kardex', texto: 'Entradas, salidas y saldo de stock por producto, y stock valorizado.' },
+  sunat: { titulo: 'Boletas SUNAT', inicial: 'boletas-sunat', texto: 'Boletas electrónicas por día con su estado en SUNAT, y fecha y hora de cada envío.' },
 };
 
 type TipoColumna = 'texto' | 'moneda' | 'numero' | 'porcentaje' | 'fecha' | 'fechaHora';
@@ -84,8 +85,8 @@ export default function Reportes({ categoria }: { categoria: CategoriaReporte })
   const lista = todos?.filter((x) => x.categoria === categoria);
   const { data: cfg } = useCarga(() => api<Configuracion>('/configuracion'), []);
   const [actual, setActual] = useState(enc.inicial);
-  const [[desde, hasta], setRango] = useState<[string, string]>(rango(categoria === 'ventas' ? 'hoy' : 'mes'));
-  const [rapido, setRapido] = useState(categoria === 'ventas' ? 'hoy' : 'mes');
+  const [[desde, hasta], setRango] = useState<[string, string]>(rango(categoria === 'ventas' || categoria === 'sunat' ? 'hoy' : 'mes'));
+  const [rapido, setRapido] = useState(categoria === 'ventas' || categoria === 'sunat' ? 'hoy' : 'mes');
   const [producto, setProducto] = useState<{ id: number; nombre: string } | null>(null);
   const info = lista?.find((x) => x.id === actual);
   const usaFechas = info?.usaFechas ?? true;

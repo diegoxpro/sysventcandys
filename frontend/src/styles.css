@@ -84,6 +84,17 @@ a { color: var(--accent); }
   font-weight: 800; color: #fff; font-size: 15px;
 }
 .brand b { display: block; font-size: 15px; }
+.brand-logo { justify-content: center; }
+.brand-logo img { display: block; max-width: 100%; max-height: 64px; object-fit: contain; background: #fff; border-radius: var(--radius-sm); padding: 6px; }
+.vista-imagen {
+  width: 220px; height: 110px; display: grid; place-items: center; padding: 10px;
+  border: 1px dashed var(--border); border-radius: var(--radius-sm); background: var(--surface);
+}
+.vista-imagen.favicon { width: 72px; height: 72px; }
+.vista-imagen.oscuro { background: #1f1d1a; }
+.vista-imagen.oscuro img { background: #fff; border-radius: var(--radius-sm); padding: 6px; }
+.vista-imagen img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.login-logo { display: block; max-width: 240px; max-height: 110px; object-fit: contain; }
 .brand span { font-size: 12px; color: #a8a29a; }
 .nav-group { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #8b857b; padding: 14px 10px 4px; }
 .nav a {
@@ -162,7 +173,7 @@ a.stat:focus-visible { outline: none; box-shadow: var(--focus); }
 .btn:active:not(:disabled) { transform: translateY(1px); }
 .btn:hover { background: var(--surface-2); border-color: var(--text-3); }
 .btn:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: none; box-shadow: var(--focus); border-color: var(--accent); }
-.btn:disabled { opacity: .55; cursor: not-allowed; }
+.btn:disabled, .btn.disabled { opacity: .55; cursor: not-allowed; }
 .btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
 .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 .btn-danger { color: var(--danger); border-color: #f1b5b5; }

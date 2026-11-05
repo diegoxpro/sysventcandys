@@ -39,6 +39,7 @@ export default function App() {
             <Route path="reportes/ventas" element={<Reportes key="ventas" categoria="ventas" />} />
             <Route path="reportes/compras" element={<Reportes key="compras" categoria="compras" />} />
             <Route path="reportes/kardex" element={<Reportes key="kardex" categoria="kardex" />} />
+            <Route path="reportes/sunat" element={<Reportes key="sunat" categoria="sunat" />} />
           </>
         )}
         <Route path="productos" element={<Productos />} />

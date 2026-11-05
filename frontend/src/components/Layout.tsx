@@ -2,6 +2,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { ReactNode, useEffect, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
+import { urlImagen, useMarca } from '../marca';
 import { Alertas } from '../types';
 import { Icono, NombreIcono } from './icons';
 import { useCarga } from './ui';
@@ -64,6 +65,8 @@ function Seccion({ id, titulo, icono, rutas, abiertas, alternar, children }: {
 export default function Layout() {
   const { usuario, salir, esAdmin } = useAuth();
   const { data: alertas } = useCarga(() => api<Alertas>('/inventario/alertas'), []);
+  const { marca } = useMarca();
+  const logo = urlImagen('LOGO', marca);
   const nAlertas = alertas ? alertas.stockBajo.length + alertas.vencidos.length + alertas.porVencer.length : 0;
   const [abiertas, setAbiertas] = useState(leerMenu);
   const alternar = (id: string, valor?: boolean) =>
@@ -81,13 +84,19 @@ export default function Layout() {
   return (
     <div className="app">
       <aside className="sidebar">
-        <div className="brand">
-          <div className="brand-mark">C</div>
-          <div>
-            <b>Candy's Market</b>
-            <span>Sistema de ventas</span>
+        {logo ? (
+          <div className="brand brand-logo">
+            <img src={logo} alt={marca.nombre} />
           </div>
-        </div>
+        ) : (
+          <div className="brand">
+            <div className="brand-mark">C</div>
+            <div>
+              <b>Candy's Market</b>
+              <span>Sistema de ventas</span>
+            </div>
+          </div>
+        )}
         <nav className="nav">
           <NavLink to="/" end>
             <Icono nombre="inicio" />
@@ -113,6 +122,7 @@ export default function Layout() {
               <Enlace to="/reportes/ventas" icono="venta">Reporte de venta</Enlace>
               <Enlace to="/reportes/compras" icono="compras">Reporte de compra</Enlace>
               <Enlace to="/reportes/kardex" icono="kardex">Reporte de kardex</Enlace>
+              <Enlace to="/reportes/sunat" icono="lista">Boletas SUNAT</Enlace>
             </Seccion>
           )}
           <Enlace to="/configuracion" icono="config">{esAdmin ? 'Configuración' : 'Mi cuenta'}</Enlace>
