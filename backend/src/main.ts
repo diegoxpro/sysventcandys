@@ -7,8 +7,8 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
-  // El certificado .pfx llega en base64 dentro del JSON.
-  app.useBodyParser('json', { limit: '1mb' });
+  // El certificado .pfx y el Excel de productos llegan en base64 dentro del JSON.
+  app.useBodyParser('json', { limit: '20mb' });
   app.setGlobalPrefix('api');
   app.enableCors();
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
