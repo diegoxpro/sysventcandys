@@ -27,6 +27,7 @@ const detalle = {
   pagos: true,
   caja: { select: { estado: true } },
   ediciones: { include: { usuario: { select: { nombre: true } } }, orderBy: { id: 'asc' } },
+  envios: { orderBy: { id: 'asc' } },
 } satisfies Prisma.VentaInclude;
 
 const MEDIO: Record<MedioPago, string> = { EFECTIVO: 'Efectivo', TARJETA: 'Tarjeta', YAPE: 'Yape', PLIN: 'Plin', TRANSFERENCIA: 'Transferencia' };

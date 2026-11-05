@@ -185,6 +185,15 @@ export class SunatService implements OnModuleInit, OnModuleDestroy {
           ...(rechazo ? { estadoSunat: EstadoSunat.RECHAZADO, cdrCodigo: (e as ErrorSunat).codigo, cdrMensaje: (e as Error).message } : {}),
         },
       });
+      // Si SUNAT llegó a responder, queda en el historial de envíos. Un mismo error
+      // repetido por los reintentos automáticos se anota una sola vez.
+      if (e instanceof ErrorSunat) {
+        const ultimo = await this.prisma.envioSunat.findFirst({ where: { ventaId: id }, orderBy: { id: 'desc' } });
+        const resultado = rechazo ? 'RECHAZADO' : 'ERROR';
+        if (!(ultimo && ultimo.resultado === resultado && ultimo.codigo === e.codigo)) {
+          await this.prisma.envioSunat.create({ data: { ventaId: id, resultado, codigo: e.codigo, mensaje: e.message.slice(0, 1000) } });
+        }
+      }
       if (!sinConexion) this.log.warn(`Boleta ${v.serie}-${v.numero}: ${(e as Error).message}`);
       return sinConexion ? 'sin-conexion' : 'error';
     }
@@ -193,17 +202,22 @@ export class SunatService implements OnModuleInit, OnModuleDestroy {
   private async aplicarCdr(id: number, cdr: Cdr) {
     const codigo = Number(cdr.codigo);
     const estado = codigo === 0 ? EstadoSunat.ACEPTADO : codigo >= 4000 ? EstadoSunat.OBSERVADO : EstadoSunat.RECHAZADO;
-    const v = await this.prisma.venta.update({
-      where: { id },
-      data: {
-        estadoSunat: estado,
-        cdrCodigo: cdr.codigo,
-        cdrMensaje: [cdr.descripcion, ...cdr.observaciones].join(' | ').slice(0, 1000),
-        sunatEnviadoEn: new Date(),
-        sunatIntentos: { increment: 1 },
-        sunatError: null,
-      },
-    });
+    const mensaje = [cdr.descripcion, ...cdr.observaciones].join(' | ').slice(0, 1000);
+    const ahora = new Date();
+    const [v] = await this.prisma.$transaction([
+      this.prisma.venta.update({
+        where: { id },
+        data: {
+          estadoSunat: estado,
+          cdrCodigo: cdr.codigo,
+          cdrMensaje: mensaje,
+          sunatEnviadoEn: ahora,
+          sunatIntentos: { increment: 1 },
+          sunatError: null,
+        },
+      }),
+      this.prisma.envioSunat.create({ data: { ventaId: id, fecha: ahora, resultado: estado as 'ACEPTADO' | 'OBSERVADO' | 'RECHAZADO', codigo: cdr.codigo, mensaje } }),
+    ]);
     // Si la venta se anuló antes de llegar a SUNAT, ahora toca darla de baja.
     if (v.estado === 'ANULADA' && (estado === EstadoSunat.ACEPTADO || estado === EstadoSunat.OBSERVADO)) {
       await this.prisma.venta.update({ where: { id }, data: { estadoSunat: EstadoSunat.BAJA_PENDIENTE } });

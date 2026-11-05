@@ -469,6 +469,7 @@ model Venta {
   pagos         VentaPago[]
   movimientos   MovimientoStock[]
   ediciones     VentaEdicion[]
+  envios        EnvioSunat[]
   resumenBaja   ResumenDiario?    @relation(fields: [resumenBajaId], references: [id])
 
   @@unique([serie, numero])
@@ -510,6 +511,30 @@ model VentaEdicion {
   venta   Venta   @relation(fields: [ventaId], references: [id])
   usuario Usuario @relation(fields: [usuarioId], references: [id])
 
+  @@index([ventaId])
+}
+
+enum ResultadoEnvio {
+  ACEPTADO
+  OBSERVADO
+  RECHAZADO
+  // SUNAT respondió con un error que no rechaza la boleta (se reintenta).
+  ERROR
+}
+
+// Historial de cada envío de una boleta a SUNAT: fecha y hora y lo que respondió.
+// Los intentos sin internet no se anotan (se reintentan solos cada 2 minutos).
+model EnvioSunat {
+  id        Int            @id @default(autoincrement())
+  ventaId   Int
+  fecha     DateTime       @default(now())
+  resultado ResultadoEnvio
+  codigo    String?
+  mensaje   String?
+
+  venta Venta @relation(fields: [ventaId], references: [id])
+
+  @@index([fecha])
   @@index([ventaId])
 }
 
