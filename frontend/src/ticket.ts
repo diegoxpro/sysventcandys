@@ -95,6 +95,7 @@ export function imprimirCierre(c: Caja, cfg: Configuracion) {
   const fila = (a: string, b: string) => `<tr><td>${a}</td><td class="r">${b}</td></tr>`;
   imprimir(`${cabecera(cfg)}
     <hr><div class="c b">CIERRE DE CAJA #${c.id}</div>
+    ${c.sinCuadrar ? '<div class="c b">** CERRADA SIN CUADRAR **</div>' : ''}
     <div>Apertura: ${esc(fechaHora(c.fechaApertura))} (${esc(c.usuarioApertura.nombre)})</div>
     <div>Cierre: ${esc(fechaHora(c.fechaCierre))} (${esc(c.usuarioCierre?.nombre)})</div><hr>
     <table>
@@ -113,7 +114,12 @@ export function imprimirCierre(c: Caja, cfg: Configuracion) {
       ${fila('<b>Efectivo contado</b>', `<b>${n(r.efectivoContado).toFixed(2)}</b>`)}
       ${fila('<b>Diferencia</b>', `<b>${n(r.diferencia).toFixed(2)}</b>`)}
     </table><hr><div class="b">DIGITAL</div><table>
-      ${Object.entries(r.totalPorMedio ?? r.porMedio).filter(([m, v]) => m !== 'EFECTIVO' && v > 0).map(([m, v]) => fila(MEDIO_LABEL[m as keyof typeof MEDIO_LABEL], v.toFixed(2))).join('') || fila('Sin ventas digitales', '0.00')}
+      ${c.sinCuadrar && r.digital?.some((d) => d.sistema > 0)
+        ? r.digital.filter((d) => d.sistema > 0).map((d) => fila(
+            `${MEDIO_LABEL[d.medio]} (sist. ${d.sistema.toFixed(2)})`,
+            d.confirmado == null ? 'sin confirmar' : `${d.confirmado.toFixed(2)} (dif ${(d.confirmado - d.sistema).toFixed(2)})`,
+          )).join('')
+        : Object.entries(r.totalPorMedio ?? r.porMedio).filter(([m, v]) => m !== 'EFECTIVO' && v > 0).map(([m, v]) => fila(MEDIO_LABEL[m as keyof typeof MEDIO_LABEL], v.toFixed(2))).join('') || fila('Sin ventas digitales', '0.00')}
     </table><hr><table>
       ${(r.conteo ?? []).filter((x) => x.cantidad > 0).map((x) => fila(`${x.cantidad} x S/ ${x.denominacion.toFixed(2)}`, (x.cantidad * x.denominacion).toFixed(2))).join('')}
     </table>

@@ -299,7 +299,9 @@ export interface ResumenCaja {
   /** Total de efectivo que debe haber en caja. */
   efectivoEsperado: number;
   conteo?: { denominacion: number; cantidad: number }[];
-  digital?: { medio: MedioPago; sistema: number; confirmado: number | null }[];
+  digital?: { medio: MedioPago; sistema: number; confirmado: number | null; diferencia?: number | null }[];
+  sinCuadrar?: boolean;
+  pendientes?: string[];
   efectivoContado?: number;
   diferencia?: number;
 }
@@ -315,6 +317,7 @@ export interface Caja {
   efectivoEsperado: Dec | null;
   efectivoContado: Dec | null;
   diferencia: Dec | null;
+  sinCuadrar?: boolean;
   observacion: string | null;
   usuarioApertura: { nombre: string };
   usuarioCierre: { nombre: string } | null;
