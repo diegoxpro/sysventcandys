@@ -112,6 +112,20 @@ model Configuracion {
   updatedAt             DateTime  @updatedAt
 }
 
+/// Imágenes de la tienda (logotipo, favicon y logo de la boleta). Van en la base para que entren en el backup.
+model ImagenTienda {
+  tipo      TipoImagen @id
+  mime      String
+  datos     Bytes
+  updatedAt DateTime   @updatedAt
+}
+
+enum TipoImagen {
+  LOGO
+  FAVICON
+  LOGO_BOLETA
+}
+
 model Categoria {
   id        Int        @id @default(autoincrement())
   nombre    String     @unique
