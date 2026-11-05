@@ -147,10 +147,19 @@ export class CajaService {
   }
 
   /**
-   * Cierra la caja solo si cuadra: el conteo de billetes debe igualar el efectivo en caja y
+   * Cierra la caja si cuadra: el conteo de billetes debe igualar el efectivo en caja y
    * cada medio digital con movimiento debe igualar lo que dice su app o voucher.
+   * Con `forzar` (casilla "cerrar aunque no cuadre") se cierra igual: se guardan las
+   * diferencias, se marca la caja como sin cuadrar y se exige una observación.
    */
-  async cerrar(usuarioId: number, conteo: Record<string, number>, digital: Record<string, number> = {}, observacion?: string) {
+  async cerrar(
+    usuarioId: number,
+    conteo: Record<string, number>,
+    digital: Record<string, number> = {},
+    observacion?: string,
+    forzar = false,
+  ) {
+    observacion = observacion?.trim() || undefined;
     return this.prisma.$transaction(async (tx) => {
       const c = await this.exigirAbierta(tx);
       const resumen = await this.resumen(c.id, tx);
@@ -171,7 +180,15 @@ export class CajaService {
         if (d.confirmado == null) errores.push(`falta confirmar ${d.medio.toLowerCase()}`);
         else if (Math.abs(d.confirmado - d.sistema) >= 0.005) errores.push(`${d.medio.toLowerCase()} no cuadra`);
       }
-      if (errores.length) throw new BadRequestException(`La caja no está cuadrada: ${errores.join(', ')}`);
+      const sinCuadrar = errores.length > 0;
+      if (sinCuadrar && !forzar) throw new BadRequestException(`La caja no está cuadrada: ${errores.join(', ')}`);
+      if (sinCuadrar && !observacion) {
+        throw new BadRequestException('Para cerrar sin cuadrar escribe en la observación el motivo de la diferencia');
+      }
+      const digitalCierre = confirmado.map((d) => ({
+        ...d,
+        diferencia: d.confirmado == null ? null : r2(d.confirmado - d.sistema),
+      }));
 
       await tx.caja.update({
         where: { id: c.id },
@@ -182,8 +199,17 @@ export class CajaService {
           efectivoEsperado: resumen.efectivoEsperado,
           efectivoContado: contado,
           diferencia,
+          sinCuadrar,
           observacion,
-          resumenCierre: { ...resumen, conteo: detalle, digital: confirmado, efectivoContado: contado, diferencia } as Prisma.InputJsonValue,
+          resumenCierre: {
+            ...resumen,
+            conteo: detalle,
+            digital: digitalCierre,
+            efectivoContado: contado,
+            diferencia,
+            sinCuadrar,
+            pendientes: errores,
+          } as Prisma.InputJsonValue,
         },
       });
       return c.id;

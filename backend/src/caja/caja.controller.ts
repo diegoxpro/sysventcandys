@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, ParseIntPipe, Post } from '@nestjs/common';
 import { MedioPago, TipoMovimientoCaja } from '@prisma/client';
-import { IsEnum, IsNumber, IsObject, IsOptional, IsPositive, IsString, Min } from 'class-validator';
+import { IsBoolean, IsEnum, IsNumber, IsObject, IsOptional, IsPositive, IsString, Min } from 'class-validator';
 import { UsuarioActual, UsuarioSesion } from '../auth/decorators';
 import { CajaService, DENOMINACIONES } from './caja.service';
 
@@ -22,6 +22,8 @@ class CerrarDto {
   /** Total que muestra la app o el voucher de cada medio digital: { "YAPE": 45.5 }. */
   @IsOptional() @IsObject() digital?: Record<string, number>;
   @IsOptional() @IsString() observacion?: string;
+  /** Cerrar aunque no cuadre: guarda la diferencia y exige una observación. */
+  @IsOptional() @IsBoolean() sinCuadrar?: boolean;
 }
 
 @Controller('caja')
@@ -60,6 +62,6 @@ export class CajaController {
 
   @Post('cerrar')
   cerrar(@Body() dto: CerrarDto, @UsuarioActual() u: UsuarioSesion) {
-    return this.caja.cerrar(u.id, dto.conteo, dto.digital, dto.observacion);
+    return this.caja.cerrar(u.id, dto.conteo, dto.digital, dto.observacion, dto.sinCuadrar === true);
   }
 }

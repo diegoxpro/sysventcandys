@@ -392,6 +392,8 @@ model Caja {
   efectivoEsperado  Decimal?   @db.Decimal(12, 2)
   efectivoContado   Decimal?   @db.Decimal(12, 2)
   diferencia        Decimal?   @db.Decimal(12, 2)
+  // true si se cerró marcando "cerrar aunque no cuadre" (efectivo o digital con diferencia).
+  sinCuadrar        Boolean    @default(false)
   observacion       String?
 
   usuarioApertura Usuario          @relation("CajaApertura", fields: [usuarioAperturaId], references: [id])
