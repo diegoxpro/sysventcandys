@@ -3,7 +3,9 @@
 // cuentas por pagar, lotes/vencimientos, mermas y movimientos de stock.
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // "windows" para armar el instalador de la tienda desde cualquier PC.
+  binaryTargets = ["native", "windows"]
 }
 
 datasource db {
@@ -110,6 +112,20 @@ model Configuracion {
   codigoEstablecimiento String    @default("0000")
   sunatModo             ModoSunat @default(DESACTIVADO)
   updatedAt             DateTime  @updatedAt
+}
+
+/// Imágenes de la tienda (logotipo, favicon y logo de la boleta). Van en la base para que entren en el backup.
+model ImagenTienda {
+  tipo      TipoImagen @id
+  mime      String
+  datos     Bytes
+  updatedAt DateTime   @updatedAt
+}
+
+enum TipoImagen {
+  LOGO
+  FAVICON
+  LOGO_BOLETA
 }
 
 model Categoria {
@@ -392,6 +408,8 @@ model Caja {
   efectivoEsperado  Decimal?   @db.Decimal(12, 2)
   efectivoContado   Decimal?   @db.Decimal(12, 2)
   diferencia        Decimal?   @db.Decimal(12, 2)
+  // true si se cerró marcando "cerrar aunque no cuadre" (efectivo o digital con diferencia).
+  sinCuadrar        Boolean    @default(false)
   observacion       String?
 
   usuarioApertura Usuario          @relation("CajaApertura", fields: [usuarioAperturaId], references: [id])
@@ -469,6 +487,7 @@ model Venta {
   pagos         VentaPago[]
   movimientos   MovimientoStock[]
   ediciones     VentaEdicion[]
+  envios        EnvioSunat[]
   resumenBaja   ResumenDiario?    @relation(fields: [resumenBajaId], references: [id])
 
   @@unique([serie, numero])
@@ -510,6 +529,30 @@ model VentaEdicion {
   venta   Venta   @relation(fields: [ventaId], references: [id])
   usuario Usuario @relation(fields: [usuarioId], references: [id])
 
+  @@index([ventaId])
+}
+
+enum ResultadoEnvio {
+  ACEPTADO
+  OBSERVADO
+  RECHAZADO
+  // SUNAT respondió con un error que no rechaza la boleta (se reintenta).
+  ERROR
+}
+
+// Historial de cada envío de una boleta a SUNAT: fecha y hora y lo que respondió.
+// Los intentos sin internet no se anotan (se reintentan solos cada 2 minutos).
+model EnvioSunat {
+  id        Int            @id @default(autoincrement())
+  ventaId   Int
+  fecha     DateTime       @default(now())
+  resultado ResultadoEnvio
+  codigo    String?
+  mensaje   String?
+
+  venta Venta @relation(fields: [ventaId], references: [id])
+
+  @@index([fecha])
   @@index([ventaId])
 }
 

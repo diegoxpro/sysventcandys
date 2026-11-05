@@ -41,7 +41,9 @@ export async function reporteAExcel(r: Reporte, empresa: string): Promise<Buffer
 
   const valor = (c: Columna, v: unknown) => {
     if (v == null) return null;
-    if (c.tipo === 'fecha' || c.tipo === 'fechaHora') return new Date(String(v));
+    // Excel no maneja zonas horarias: la hora se escribe ya en hora de Lima (UTC-5, sin horario de verano).
+    if (c.tipo === 'fechaHora') return new Date(new Date(String(v)).getTime() - 5 * 3_600_000);
+    if (c.tipo === 'fecha') return new Date(String(v));
     if (c.tipo && c.tipo !== 'texto') return Number(v);
     return String(v);
   };

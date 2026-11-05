@@ -16,6 +16,18 @@ const suma = (filas: Record<string, unknown>[], ...claves: string[]) =>
 const margen = (utilidad: number, venta: number) => (venta > 0 ? Math.round((utilidad / venta) * 1000) / 10 : 0);
 
 const MEDIO: Record<string, string> = { EFECTIVO: 'Efectivo', TARJETA: 'Tarjeta', YAPE: 'Yape', PLIN: 'Plin', TRANSFERENCIA: 'Transferencia' };
+const ESTADO_SUNAT: Record<string, string> = {
+  PENDIENTE: 'Pendiente de envío',
+  ACEPTADO: 'Aceptada',
+  OBSERVADO: 'Aceptada con observaciones',
+  RECHAZADO: 'Rechazada',
+  BAJA_PENDIENTE: 'Anulada · baja por enviar',
+  BAJA_ENVIADA: 'Anulada · baja enviada',
+  BAJA_ACEPTADA: 'Anulada · baja aceptada',
+  NO_APLICA: 'No enviada (SUNAT desactivado)',
+};
+const RESULTADO: Record<string, string> = { ACEPTADO: 'Aceptada', OBSERVADO: 'Aceptada con observaciones', RECHAZADO: 'Rechazada', ERROR: 'Error de SUNAT' };
+const correlativo = (serie: string, numero: number) => `${serie}-${String(numero).padStart(8, '0')}`;
 const COMPROBANTE: Record<string, string> = { BOLETA: 'BOLETA DE VENTA', BOLETA_LIBRE: 'BOLETA VENTA LIBRE' };
 
 export const REPORTES = {
@@ -26,6 +38,8 @@ export const REPORTES = {
   'ventas-por-cajero': 'Ventas por cajero',
   utilidad: 'Utilidad del período',
   compras: 'Compras por proveedor',
+  'boletas-sunat': 'Boletas electrónicas (SUNAT)',
+  'envios-sunat': 'Historial de envíos a SUNAT',
   'stock-valorizado': 'Stock valorizado',
 } as const;
 export type NombreReporte = keyof typeof REPORTES;
@@ -60,6 +74,10 @@ export class ReportesService {
         return this.utilidad(f);
       case 'compras':
         return this.compras(f);
+      case 'boletas-sunat':
+        return this.boletasSunat(f);
+      case 'envios-sunat':
+        return this.enviosSunat(f);
       case 'stock-valorizado':
         return this.stockValorizado();
       default:
@@ -280,6 +298,84 @@ export class ReportesService {
       ],
       filas,
       totales: suma(filas, 'compras', 'total', 'pagado', 'saldo'),
+    };
+  }
+
+  /** Todas las boletas emitidas en el período, con su estado en SUNAT y cuándo se enviaron. */
+  private async boletasSunat(f: Filtro): Promise<Reporte> {
+    const ventas = await this.prisma.venta.findMany({
+      where: { tipoComprobante: 'BOLETA', fecha: { gte: f.desde, lt: f.hasta } },
+      select: {
+        serie: true, numero: true, fecha: true, total: true, estado: true, estadoSunat: true, sunatEnviadoEn: true,
+        sunatIntentos: true, cdrCodigo: true, cdrMensaje: true, sunatError: true,
+        cliente: { select: { nombre: true } },
+        envios: { select: { fecha: true }, orderBy: { id: 'desc' }, take: 1 },
+      },
+      orderBy: [{ serie: 'asc' }, { numero: 'asc' }],
+    });
+    const filas = ventas.map((v) => ({
+      estado: ESTADO_SUNAT[v.estadoSunat] ?? v.estadoSunat,
+      boleta: correlativo(v.serie, v.numero),
+      emision: v.fecha,
+      cliente: v.cliente?.nombre ?? 'PÚBLICO GENERAL',
+      total: r2(v.total),
+      // Fecha de la respuesta de SUNAT; si fue rechazada antes del CDR, la del último envío.
+      enviado: v.sunatEnviadoEn ?? v.envios[0]?.fecha ?? null,
+      intentos: v.sunatIntentos,
+      respuesta: v.cdrCodigo != null ? `${v.cdrCodigo}: ${v.cdrMensaje ?? ''}` : (v.sunatError ?? ''),
+      anulada: v.estado === 'ANULADA',
+    }));
+    const validas = filas.filter((x) => !x.anulada);
+    const enviadas = filas.filter((x) => x.enviado).length;
+    return {
+      titulo: 'Boletas electrónicas (SUNAT)',
+      subtitulo: `${f.etiqueta} · por fecha de emisión · ${filas.length} boletas, ${enviadas} enviadas, ${filas.length - enviadas} sin enviar · el total no suma las anuladas`,
+      agruparPor: 'estado',
+      columnas: [
+        { clave: 'boleta', titulo: 'Boleta' },
+        { clave: 'emision', titulo: 'Emisión', tipo: 'fechaHora' },
+        { clave: 'cliente', titulo: 'Cliente' },
+        { clave: 'total', titulo: 'Total', tipo: 'moneda' },
+        { clave: 'estado', titulo: 'Estado SUNAT' },
+        { clave: 'enviado', titulo: 'Enviada a SUNAT', tipo: 'fechaHora' },
+        { clave: 'intentos', titulo: 'Intentos', tipo: 'numero' },
+        { clave: 'respuesta', titulo: 'Respuesta de SUNAT' },
+      ],
+      filas: filas.map(({ anulada: _a, ...x }) => x),
+      totales: suma(validas, 'total'),
+    };
+  }
+
+  /** Cada envío de boleta a SUNAT con su fecha y hora y lo que respondió. */
+  private async enviosSunat(f: Filtro): Promise<Reporte> {
+    const envios = await this.prisma.envioSunat.findMany({
+      where: { fecha: { gte: f.desde, lt: f.hasta } },
+      include: { venta: { select: { serie: true, numero: true, fecha: true, total: true, cliente: { select: { nombre: true } } } } },
+      orderBy: { fecha: 'asc' },
+    });
+    const filas = envios.map((e) => ({
+      enviado: e.fecha,
+      boleta: correlativo(e.venta.serie, e.venta.numero),
+      emision: e.venta.fecha,
+      cliente: e.venta.cliente?.nombre ?? 'PÚBLICO GENERAL',
+      total: r2(e.venta.total),
+      resultado: RESULTADO[e.resultado],
+      respuesta: [e.codigo, e.mensaje].filter(Boolean).join(': '),
+    }));
+    const aceptadas = envios.filter((e) => e.resultado === 'ACEPTADO' || e.resultado === 'OBSERVADO').length;
+    return {
+      titulo: 'Historial de envíos a SUNAT',
+      subtitulo: `${f.etiqueta} · por fecha de envío · ${envios.length} envíos, ${aceptadas} aceptados, ${envios.length - aceptadas} con problema`,
+      columnas: [
+        { clave: 'enviado', titulo: 'Fecha y hora de envío', tipo: 'fechaHora' },
+        { clave: 'boleta', titulo: 'Boleta' },
+        { clave: 'emision', titulo: 'Emisión', tipo: 'fechaHora' },
+        { clave: 'cliente', titulo: 'Cliente' },
+        { clave: 'total', titulo: 'Total', tipo: 'moneda' },
+        { clave: 'resultado', titulo: 'Resultado' },
+        { clave: 'respuesta', titulo: 'Respuesta de SUNAT' },
+      ],
+      filas,
     };
   }
 

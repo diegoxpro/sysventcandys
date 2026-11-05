@@ -23,13 +23,31 @@ Sistema de ventas para minimarket que funciona **sin internet** en la PC de la t
 | Reportes | Ventas resumido (como el de SysVent, agrupado por comprobante), ventas por producto con utilidad y margen, por día, por medio de pago, por cajero, utilidad del período (ventas − costo − mermas − gastos), compras por proveedor y stock valorizado. Descarga en Excel o impresión/PDF. Solo administrador. |
 | Backup | Copia diaria de la base de datos con `pg_dump` a una carpeta de Google Drive para escritorio, más una copia local. También al cerrar caja y con un botón. Conserva los últimos 30. |
 | Facturación electrónica | Las boletas B001 se firman con tu certificado digital y se envían directo a SUNAT (SEE del contribuyente). Sin internet quedan "por enviar" y se reintenta solo cada 2 minutos. Las anulaciones van en el resumen diario. Ticket con QR, hash y leyenda de la Amazonía. Las boletas libres (L001) nunca se envían. |
-| Configuración | Datos de la tienda, márgenes por defecto, redondeo de precios, permitir venta sin stock, días de aviso de vencimiento, usuarios (administrador y cajeros), SUNAT. |
+| Configuración | Datos de la tienda, logotipo, favicon y logo de las boletas, márgenes por defecto, redondeo de precios, permitir venta sin stock, días de aviso de vencimiento, usuarios (administrador y cajeros), SUNAT. |
 
 ## Ticketera y gaveta
 
 El ticket se imprime con la impresora predeterminada de Windows (POS-80C, papel de 80 mm). Para que la gaveta se abra sola, activa en el driver de la impresora la opción de abrir el cajón al imprimir ("Cash drawer: open before printing"). Para imprimir sin el cuadro de diálogo, abre el sistema en Chrome con `--kiosk-printing`.
 
-## Instalación en la PC de la tienda (Windows)
+## Instalador para Windows
+
+`instalador/construir-paquete.sh` arma un zip que se instala sin internet: trae Node para Windows, el backend y el frontend compilados y los motores de Prisma para Windows. En la PC de la tienda solo hace falta PostgreSQL 17.
+
+```bash
+instalador/construir-paquete.sh   # deja el zip en instalador/salida/
+```
+
+En la tienda se descomprime y se hace doble clic en `INSTALAR.bat` (las instrucciones para el usuario están en `instalador/windows/LEEME.txt`). El instalador:
+
+- Pide la clave de `postgres`, crea la base `candys` y escribe `datos\config.env`.
+- Restaura un `.backup` de otra PC (con sus usuarios, ventas y caja) o crea una base nueva con `admin` y, si se quiere, importa el CSV de SysVent.
+- Copia el certificado SUNAT si hay una carpeta `secretos` junto al instalador o al backup.
+- Crea los accesos directos "Candy's Market" y "Cerrar Candy's Market" y, si se elige, el arranque al encender la PC.
+- Si la carpeta ya tiene una instalación, la actualiza: saca un backup, reemplaza `app\` y corre las migraciones.
+
+El backend sirve la interfaz compilada en el mismo puerto (`http://localhost:3000`) cuando encuentra `frontend/dist` (o la carpeta de `FRONTEND_DIR`), así que en la tienda no se usa Vite. `HOST=127.0.0.1` hace que solo esa PC pueda entrar.
+
+## Instalación manual (Windows)
 
 1. Instala [Node.js 22 LTS](https://nodejs.org) y [PostgreSQL 16](https://www.postgresql.org/download/windows/). Anota la contraseña del usuario `postgres`.
 2. Crea la base de datos `candys` (con pgAdmin o `psql -U postgres -c "create database candys;"`).
