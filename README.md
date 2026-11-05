@@ -23,7 +23,7 @@ Sistema de ventas para minimarket que funciona **sin internet** en la PC de la t
 | Reportes | Ventas resumido (como el de SysVent, agrupado por comprobante), ventas por producto con utilidad y margen, por día, por medio de pago, por cajero, utilidad del período (ventas − costo − mermas − gastos), compras por proveedor y stock valorizado. Descarga en Excel o impresión/PDF. Solo administrador. |
 | Backup | Copia diaria de la base de datos con `pg_dump` a una carpeta de Google Drive para escritorio, más una copia local. También al cerrar caja y con un botón. Conserva los últimos 30. |
 | Facturación electrónica | Las boletas B001 se firman con tu certificado digital y se envían directo a SUNAT (SEE del contribuyente). Sin internet quedan "por enviar" y se reintenta solo cada 2 minutos. Las anulaciones van en el resumen diario. Ticket con QR, hash y leyenda de la Amazonía. Las boletas libres (L001) nunca se envían. |
-| Configuración | Datos de la tienda, márgenes por defecto, redondeo de precios, permitir venta sin stock, días de aviso de vencimiento, usuarios (administrador y cajeros), SUNAT. |
+| Configuración | Datos de la tienda, logotipo, favicon y logo de las boletas, márgenes por defecto, redondeo de precios, permitir venta sin stock, días de aviso de vencimiento, usuarios (administrador y cajeros), SUNAT. |
 
 ## Ticketera y gaveta
 

@@ -1,5 +1,6 @@
 import QRCode from 'qrcode';
 import { fechaHora, money, n, qty } from './format';
+import { urlImagen } from './marca';
 import { Caja, COMPROBANTE_LABEL, Configuracion, MEDIO_LABEL, Venta } from './types';
 
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -67,7 +68,9 @@ export async function imprimirVenta(v: Venta, cfg: Configuracion) {
     )
     .join('');
   const pagos = v.pagos.map((p) => `<tr><td>${MEDIO_LABEL[p.medioPago]}${p.numeroOperacion ? ` ${esc(p.numeroOperacion)}` : ''}</td><td class="r">${n(p.monto).toFixed(2)}</td></tr>`).join('');
-  imprimir(`${cabecera(cfg)}
+  const logo = urlImagen('LOGO_BOLETA');
+  imprimir(`${logo ? `<div class="c"><img src="${location.origin}${logo}" style="max-width:60mm;max-height:30mm"></div>` : ''}
+    ${cabecera(cfg)}
     <hr><div class="c b">${titulo}</div><div class="c b">${correlativo(v)}</div>
     <div>Fecha: ${esc(fechaHora(v.fecha))}</div>
     <div>Cliente: ${esc(v.cliente?.nombre ?? 'PÚBLICO GENERAL')}</div>

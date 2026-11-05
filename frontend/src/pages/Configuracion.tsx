@@ -3,6 +3,7 @@ import { api } from '../api';
 import { useAuth } from '../auth';
 import { Campo, Modal, useCarga, useToast } from '../components/ui';
 import { fecha, fechaHora, n, precioSugerido } from '../format';
+import { Marca, prepararImagen, TipoImagen, urlImagen, useMarca } from '../marca';
 import { Configuracion as Config, EstadoBackup, EstadoSunatGeneral, Rol, Serie, SUNAT_LABEL, Usuario } from '../types';
 
 export default function Configuracion() {
@@ -14,6 +15,7 @@ export default function Configuracion() {
       {esAdmin && (
         <div className="tabs">
           <button className={tab === 'preferencias' ? 'active' : ''} onClick={() => setTab('preferencias')}>Preferencias</button>
+          <button className={tab === 'imagenes' ? 'active' : ''} onClick={() => setTab('imagenes')}>Logotipos</button>
           <button className={tab === 'series' ? 'active' : ''} onClick={() => setTab('series')}>Comprobantes</button>
           <button className={tab === 'usuarios' ? 'active' : ''} onClick={() => setTab('usuarios')}>Usuarios</button>
           <button className={tab === 'sunat' ? 'active' : ''} onClick={() => setTab('sunat')}>SUNAT</button>
@@ -22,6 +24,7 @@ export default function Configuracion() {
         </div>
       )}
       {tab === 'preferencias' && <Preferencias />}
+      {tab === 'imagenes' && <Imagenes />}
       {tab === 'series' && <Series />}
       {tab === 'usuarios' && <Usuarios />}
       {tab === 'sunat' && <Sunat />}
@@ -134,6 +137,87 @@ function Preferencias() {
         </div>
       </div>
       <div><button className="btn btn-primary" onClick={guardar}>Guardar preferencias</button></div>
+    </div>
+  );
+}
+
+const IMAGENES: { tipo: TipoImagen; titulo: string; ayuda: string; fondo?: 'oscuro' | 'ticket' }[] = [
+  { tipo: 'LOGO', titulo: 'Logotipo de la tienda', ayuda: 'Se muestra en el menú y en la pantalla de ingreso. Se reduce a 512 px como máximo.', fondo: 'oscuro' },
+  { tipo: 'FAVICON', titulo: 'Favicon', ayuda: 'El ícono de la pestaña del navegador. Mejor una imagen cuadrada y simple; se reduce a 64 × 64 px.' },
+  {
+    tipo: 'LOGO_BOLETA',
+    titulo: 'Logo de las boletas',
+    ayuda: 'Se imprime arriba del ticket de venta (boleta y nota de venta). Queda en blanco y negro, como lo imprime la ticketera. Un logo con trazos gruesos y buen contraste sale mejor.',
+    fondo: 'ticket',
+  },
+];
+
+function Imagenes() {
+  const avisar = useToast();
+  const { marca, setMarca } = useMarca();
+  const [ocupado, setOcupado] = useState<TipoImagen | null>(null);
+
+  const subir = async (tipo: TipoImagen, archivo: File | undefined) => {
+    if (!archivo) return;
+    setOcupado(tipo);
+    try {
+      const base64 = await prepararImagen(archivo, tipo);
+      setMarca(await api<Marca>(`/configuracion/imagenes/${tipo}`, { method: 'PUT', body: { archivo: base64 } }));
+      avisar('Imagen guardada');
+    } catch (e) {
+      avisar((e as Error).message, true);
+    } finally {
+      setOcupado(null);
+    }
+  };
+  const quitar = async (tipo: TipoImagen) => {
+    if (!window.confirm('¿Quitar esta imagen?')) return;
+    setOcupado(tipo);
+    try {
+      setMarca(await api<Marca>(`/configuracion/imagenes/${tipo}`, { method: 'DELETE' }));
+      avisar('Imagen quitada');
+    } catch (e) {
+      avisar((e as Error).message, true);
+    } finally {
+      setOcupado(null);
+    }
+  };
+
+  return (
+    <div className="stack" style={{ maxWidth: 820 }}>
+      {IMAGENES.map(({ tipo, titulo, ayuda, fondo }) => {
+        const url = urlImagen(tipo, marca);
+        return (
+          <div key={tipo} className="card card-pad stack">
+            <div>
+              <h2>{titulo}</h2>
+              <p className="muted small" style={{ margin: '4px 0 0' }}>{ayuda}</p>
+            </div>
+            <div className="row" style={{ gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div className={`vista-imagen ${fondo ?? ''} ${tipo === 'FAVICON' ? 'favicon' : ''}`}>
+                {url ? <img src={url} alt={titulo} /> : <span className="muted small">Sin imagen</span>}
+              </div>
+              <div className="row">
+                <label className={`btn ${ocupado ? 'disabled' : ''}`}>
+                  {ocupado === tipo ? 'Guardando…' : url ? 'Cambiar imagen' : 'Elegir imagen'}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/x-icon,image/vnd.microsoft.icon,.ico"
+                    hidden
+                    disabled={!!ocupado}
+                    onChange={(e) => {
+                      subir(tipo, e.target.files?.[0]);
+                      e.target.value = '';
+                    }}
+                  />
+                </label>
+                {url && <button className="btn" onClick={() => quitar(tipo)} disabled={!!ocupado}>Quitar</button>}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+      <p className="small muted" style={{ margin: 0 }}>Las imágenes se guardan en la base de datos, así que también entran en los backups.</p>
     </div>
   );
 }
