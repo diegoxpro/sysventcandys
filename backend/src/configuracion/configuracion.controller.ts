@@ -27,6 +27,13 @@ class ActualizarConfiguracionDto {
   @IsOptional() @IsString() empresaDistrito?: string;
   @IsOptional() @Matches(/^\d{4}$/, { message: 'Código de establecimiento de 4 dígitos' }) codigoEstablecimiento?: string;
   @IsOptional() @IsEnum(ModoSunat) sunatModo?: ModoSunat;
+  /** Texto vacío lo borra. */
+  @IsOptional() @IsString() consultaDocToken?: string;
+}
+
+/** El token de consulta DNI/RUC no sale del servidor: solo se informa si está puesto. */
+function publica<T extends { consultaDocToken: string | null }>({ consultaDocToken, ...resto }: T) {
+  return { ...resto, consultaDocConfigurada: !!consultaDocToken };
 }
 
 @Controller('configuracion')
@@ -34,13 +41,14 @@ export class ConfiguracionController {
   constructor(private readonly config: ConfiguracionService) {}
 
   @Get()
-  obtener() {
-    return this.config.obtener();
+  async obtener() {
+    return publica(await this.config.obtener());
   }
 
   @Roles(Rol.ADMIN)
   @Patch()
-  actualizar(@Body() dto: ActualizarConfiguracionDto) {
-    return this.config.actualizar(dto);
+  async actualizar(@Body() dto: ActualizarConfiguracionDto) {
+    if (dto.consultaDocToken !== undefined) dto.consultaDocToken = (dto.consultaDocToken.trim() || null) as string;
+    return publica(await this.config.actualizar(dto));
   }
 }

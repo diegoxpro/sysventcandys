@@ -5,6 +5,7 @@ import Layout from './components/Layout';
 import Compras from './pages/Compras';
 import CompraDetalle from './pages/CompraDetalle';
 import Caja from './pages/Caja';
+import Clientes from './pages/Clientes';
 import Configuracion from './pages/Configuracion';
 import CuentasPorPagar from './pages/CuentasPorPagar';
 import Inicio from './pages/Inicio';
@@ -41,6 +42,7 @@ export default function App() {
         <Route path="venta" element={<Venta />} />
         <Route path="caja" element={<Caja />} />
         <Route path="ventas" element={<Ventas />} />
+        <Route path="clientes" element={<Clientes />} />
         {esAdmin && (
           <>
             <Route path="reportes" element={<Navigate to="/reportes/ventas" replace />} />

@@ -140,6 +140,43 @@ function Preferencias() {
         </div>
       </div>
       <div><button className="btn btn-primary" onClick={guardar}>Guardar preferencias</button></div>
+      <ConsultaDocumentos configurada={!!data.consultaDocConfigurada} />
+    </div>
+  );
+}
+
+/** Token de Decolecta para autollenar clientes por DNI/RUC. El servidor nunca lo devuelve. */
+function ConsultaDocumentos({ configurada: inicial }: { configurada: boolean }) {
+  const avisar = useToast();
+  const [configurada, setConfigurada] = useState(inicial);
+  const [token, setToken] = useState('');
+  const guardar = async (valor: string) => {
+    try {
+      const r = await api<Config>('/configuracion', { method: 'PATCH', body: { consultaDocToken: valor } });
+      setConfigurada(!!r.consultaDocConfigurada);
+      setToken('');
+      avisar(valor ? 'Token de consulta guardado' : 'Consulta en línea desactivada');
+    } catch (e) {
+      avisar((e as Error).message, true);
+    }
+  };
+  return (
+    <div className="card card-pad stack">
+      <div>
+        <h2>Consulta de DNI y RUC</h2>
+        <p className="muted small" style={{ margin: '4px 0 0' }}>
+          Con un token de Decolecta (decolecta.com, antes apis.net.pe) la pantalla Clientes llena el nombre y la dirección al buscar un DNI o RUC.
+          Necesita internet solo al buscar; sin conexión se escribe a mano. Los clientes guardados se encuentran siempre, aunque no haya internet.
+        </p>
+      </div>
+      <div className="row" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <Campo label={configurada ? 'Token (ya configurado; escribe otro para cambiarlo)' : 'Token'} className="grow">
+          <input type="password" autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)} placeholder={configurada ? '••••••••••••' : 'Pega aquí tu token'} />
+        </Campo>
+        <button className="btn btn-primary" onClick={() => guardar(token.trim())} disabled={!token.trim()}>Guardar token</button>
+        {configurada && <button className="btn" onClick={() => guardar('')}>Quitar</button>}
+      </div>
+      <span className={`badge ${configurada ? 'ok' : ''}`} style={{ alignSelf: 'flex-start' }}>{configurada ? 'Consulta en línea activa' : 'Sin configurar: solo búsqueda en clientes guardados'}</span>
     </div>
   );
 }

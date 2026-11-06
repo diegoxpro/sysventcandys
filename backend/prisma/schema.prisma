@@ -113,6 +113,8 @@ model Configuracion {
   empresaDistrito       String?
   codigoEstablecimiento String    @default("0000")
   sunatModo             ModoSunat @default(DESACTIVADO)
+  // Token del servicio de consulta DNI/RUC (Decolecta). Nunca se devuelve al navegador.
+  consultaDocToken      String?
   updatedAt             DateTime  @updatedAt
 }
 
@@ -394,6 +396,10 @@ model Cliente {
   nombre    String
   direccion String?
   telefono  String?
+  email     String?
+  notas     String?
+  // Inactivo: no aparece al elegir cliente en la venta; se conserva por sus ventas.
+  activo    Boolean          @default(true)
   createdAt DateTime         @default(now())
   ventas    Venta[]
 }
