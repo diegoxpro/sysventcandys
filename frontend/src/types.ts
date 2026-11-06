@@ -64,6 +64,9 @@ export interface Proveedor {
   email: string | null;
   direccion: string | null;
   contacto: string | null;
+  /** Días de crédito que suele dar: la compra propone Crédito con esa fecha de pago. */
+  diasCredito?: number | null;
+  notas?: string | null;
   activo: boolean;
   deuda?: Dec;
 }
