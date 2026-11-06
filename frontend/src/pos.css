@@ -150,3 +150,18 @@
 .cliente-doc { grid-template-columns: auto minmax(0, 1fr); }
 .otro-doc { width: 76px; padding-left: 8px; padding-right: 4px; }
 .otro-doc.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+
+/* Cliente en el punto de venta: misma cabecera que el cobro; buscar a la izquierda, nuevo a la derecha. */
+.modal.cliente-pos { width: min(1000px, 100%); }
+.cliente-pos-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); }
+.cliente-pos .cobro-monto { min-height: 380px; }
+.cliente-resultados { display: grid; gap: 4px; margin-top: 10px; max-height: 300px; overflow: auto; align-content: start; }
+.cliente-resultado { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 1.5px solid transparent; border-radius: 10px; background: none; font: inherit; text-align: left; cursor: pointer; color: var(--text); }
+.cliente-resultado > .icono { color: var(--text-3); flex: none; }
+.cliente-resultado b { display: block; font-weight: 600; }
+.cliente-resultado small { display: block; }
+.cliente-resultado.on { background: var(--accent-soft); border-color: var(--accent); }
+.cliente-resultado.on > .icono { color: var(--accent); }
+.cliente-pos .modal-foot .btn { display: inline-flex; align-items: center; gap: 8px; }
+.cliente-pos .modal-foot .btn-confirmar { min-width: 0; }
+@media (max-width: 820px) { .cliente-pos-grid { grid-template-columns: 1fr; } .cliente-pos .cobro-monto { min-height: 0; } }
