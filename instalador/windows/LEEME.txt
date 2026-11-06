@@ -53,14 +53,26 @@ Uso diario
 - "Cerrar Candy's Market": lo apaga.
 - Si no abre, el detalle del error está en C:\CandysMarket\logs\sistema.log
 
-Actualizar
-----------
-Con un paquete nuevo, vuelve a abrir INSTALAR.bat y elige la misma carpeta.
-Guarda una copia de la base de datos, cambia el programa y conserva tus datos.
+Actualizar (si la PC ya tiene el sistema instalado con este paquete)
+--------------------------------------------------------------------
+1) Cierra la caja del día.
+2) Descomprime el zip nuevo y haz doble clic en ACTUALIZAR.bat.
+3) Presiona Enter para usar la carpeta que encuentra (C:\CandysMarket).
+Apaga el sistema, guarda una copia de la base de datos en datos\backups,
+cambia el programa, actualiza la base y lo vuelve a abrir. Tus datos,
+usuarios, certificado SUNAT y configuración se quedan igual.
+
+Celulares para el inventario
+----------------------------
+Al instalar o actualizar, Windows pide permiso de administrador una vez para
+abrir los puertos 3443 y 3080 en la red privada. Acepta con "Sí". Los
+celulares deben estar en el mismo WiFi que la PC, y la red de Windows debe
+estar como "Privada". En Inventario > Realizar inventario aparece el QR.
 
 Dónde queda cada cosa (C:\CandysMarket)
 ---------------------------------------
 app\       el programa (se reemplaza al actualizar)
-datos\     config.env (clave de la base), secretos (SUNAT) y backups
+datos\     config.env (clave de la base), secretos (SUNAT), backups y
+           certificados-red (certificado para los celulares)
 logs\      registro del sistema
 scripts\   arranque y cierre
