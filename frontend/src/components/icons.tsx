@@ -19,6 +19,10 @@ const TRAZOS = {
   flecha: 'M9 6l6 6-6 6',
   lista: 'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01',
   kardex: 'M5 3h14v18H5zM9 7h6M9 11h6M9 15h3',
+  monedas: 'M4 7c0 1.66 3.13 3 7 3s7-1.34 7-3-3.13-3-7-3-7 1.34-7 3ZM4 7v4c0 1.66 3.13 3 7 3s7-1.34 7-3V7M4 11v4c0 1.66 3.13 3 7 3 1 0 2-.1 2.8-.27M18 11v2',
+  billetera: 'M4 7h15a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7Zm0 0 11-3v3M16 13.5h.01',
+  imprimir: 'M7 9V4h10v5M7 17H5a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-2M7 14h10v6H7z',
+  volver: 'M9 14 4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11',
 } as const;
 
 export type NombreIcono = keyof typeof TRAZOS;

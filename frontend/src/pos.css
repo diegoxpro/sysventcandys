@@ -21,10 +21,63 @@
 .qty input { width: 64px; text-align: center; height: 32px; }
 .qty button { width: 28px; height: 28px; padding: 0; }
 .atajos { display: flex; gap: 14px; flex-wrap: wrap; color: var(--text-2); font-size: 12px; padding: 8px 12px; border-top: 1px solid var(--border); }
-.pago-fila { display: grid; grid-template-columns: 120px 1fr 1fr; gap: 8px; align-items: center; }
-.pago-fila .medio { justify-content: space-between; gap: 8px; }
-.rapidos { display: flex; gap: 6px; flex-wrap: wrap; }
-.vuelto { font-size: 28px; font-weight: 750; font-variant-numeric: tabular-nums; }
+/* Cobrar venta: monto y billetes a la izquierda, medios de pago con su logo a la derecha */
+.modal.cobro { width: min(960px, 100%); overflow: hidden; }
+.cobro .modal-head { background: linear-gradient(100deg, var(--accent) 0%, var(--accent-hover) 100%); color: #fff; border-bottom: 0; padding: 14px 20px; }
+.cobro .modal-head .close { color: #fff; border: 1.5px solid rgb(255 255 255 / 60%); border-radius: var(--radius-sm); }
+.cobro .modal-head .close:hover { background: rgb(255 255 255 / 15%); }
+.cobro-titulo { display: flex; align-items: center; gap: 14px; font-size: 22px; font-weight: 700; }
+.cobro-titulo > span { display: flex; flex-direction: column; line-height: 1.15; padding-left: 14px; border-left: 1px solid rgb(255 255 255 / 40%); }
+.cobro-titulo small { font-size: 14px; font-weight: 500; opacity: .9; }
+.cobro .modal-body { background: var(--surface-2); }
+.cobro h3 { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 700; margin-bottom: 14px; }
+.cobro h3 .icono { color: var(--accent); }
+.cobro-grid { display: grid; grid-template-columns: 300px minmax(0, 1fr); background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+.cobro-grid > section { padding: 16px 18px; }
+.cobro-monto { border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+.cobro-total { border: 2px solid var(--accent); border-radius: 12px; padding: 14px 12px; text-align: center; font-size: 44px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.cobro-billetes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+.cobro-billetes .btn { padding: 0 6px; font-size: 18px; font-weight: 700; background: var(--surface-2); }
+.cobro-ayuda { margin-top: auto; padding-top: 16px; display: grid; gap: 4px; }
+.cobro-lista { display: grid; gap: 6px; }
+.cobro-fila { display: grid; grid-template-columns: 190px minmax(100px, 140px) minmax(0, 1fr); gap: 10px; align-items: center; padding: 6px 10px 6px 6px; border: 1.5px solid transparent; border-bottom-color: var(--border); border-radius: 10px; transition: background .15s var(--ease), border-color .15s var(--ease); }
+.cobro-fila:last-child { border-bottom-color: transparent; }
+.cobro-fila.con-monto { background: var(--surface-2); }
+.cobro-fila.on { background: var(--accent-soft); border-color: var(--accent); }
+.cobro-medio { display: flex; align-items: center; gap: 10px; background: none; border: 0; padding: 4px; border-radius: 8px; cursor: pointer; font: inherit; color: var(--text-2); text-align: left; }
+.cobro-medio:focus-visible { outline: none; box-shadow: var(--focus); }
+.cobro-medio img { height: 44px; width: 116px; object-fit: contain; object-position: left center; }
+.cobro-medio .radio { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--border-strong); background: var(--surface); }
+.cobro-fila.on .radio { border-color: var(--accent); background: radial-gradient(circle, var(--accent) 0 5px, var(--surface) 6px); }
+.cobro-importe { height: 44px; font-size: 18px; font-weight: 650; }
+.cobro-nota { padding-left: 4px; }
+.cobro-resumen { display: grid; grid-template-columns: auto 1fr auto auto; gap: 8px 28px; align-items: center; padding: 14px 22px; border-radius: 12px; background: var(--ok-soft); border: 1px solid #b2f2bb; }
+.cobro-resumen > .num { text-align: right; padding-left: 28px; border-left: 1px solid #b2f2bb; }
+.cobro-resumen-icono { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--ok); color: #fff; }
+.cobro-resumen .etiqueta { color: var(--text-2); font-size: 14px; }
+.cobro-resumen .cifra { font-size: 34px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.cobro-resumen .cifra.chica { font-size: 22px; font-weight: 650; color: var(--text-2); }
+.cobro-resumen .resalta { color: var(--ok); }
+.cobro-resumen.falta { background: var(--danger-soft); border-color: #ffc9c9; }
+.cobro-resumen.falta > .num { border-left-color: #ffc9c9; }
+.cobro-resumen.falta .cobro-resumen-icono { background: var(--danger); }
+.cobro-resumen.falta .resalta { color: var(--danger); }
+.cobro .modal-foot { background: var(--surface); align-items: center; gap: 12px; }
+.cobro-imprimir .icono { color: var(--text-2); }
+.btn-confirmar { background: var(--ok); border-color: var(--ok); color: #fff; min-width: 230px; }
+.btn-confirmar:hover:not(:disabled) { background: #237032; border-color: #237032; }
+.btn-confirmar .kbd { opacity: .85; }
+@media (max-width: 820px) {
+  .cobro-grid { grid-template-columns: 1fr; }
+  .cobro-monto { border-right: 0; border-bottom: 1px solid var(--border); }
+  .cobro-ayuda { display: none; }
+  .cobro-fila { grid-template-columns: 1fr 1fr; }
+  .cobro-medio { grid-column: 1 / -1; }
+  .cobro-resumen { grid-template-columns: auto 1fr; }
+  .cobro-resumen > .num { grid-column: 1 / -1; text-align: left; padding-left: 0; border-left: 0; }
+  .cobro .modal-foot { flex-wrap: wrap; }
+  .btn-confirmar { min-width: 0; flex: 1; }
+}
 /* Cierre de caja: contador de billetes (de menor a mayor) junto al balance */
 .cierre-grid { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 20px; align-items: start; }
 .contador { display: grid; gap: 6px; }

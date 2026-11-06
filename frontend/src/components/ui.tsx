@@ -9,12 +9,15 @@ export function Modal({
   children,
   pie,
   ancho,
+  className,
 }: {
   titulo: ReactNode;
   onClose: () => void;
   children: ReactNode;
   pie?: ReactNode;
   ancho?: boolean;
+  /** Clase extra de la caja, para modales con diseño propio (por ejemplo el cobro). */
+  className?: string;
 }) {
   const caja = useRef<HTMLDivElement>(null);
   const cerrar = useRef(onClose);
@@ -46,7 +49,7 @@ export function Modal({
 
   return (
     <div className="backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div ref={caja} className={`modal${ancho ? ' wide' : ''}`} role="dialog" aria-modal="true" aria-labelledby="modal-titulo" tabIndex={-1}>
+      <div ref={caja} className={`modal${ancho ? ' wide' : ''}${className ? ` ${className}` : ''}`} role="dialog" aria-modal="true" aria-labelledby="modal-titulo" tabIndex={-1}>
         <div className="modal-head">
           <h2 id="modal-titulo">{titulo}</h2>
           <button className="close" onClick={onClose} aria-label="Cerrar" title="Cerrar (Esc)">
