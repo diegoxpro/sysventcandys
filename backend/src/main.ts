@@ -4,6 +4,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { AppModule } from './app.module';
+import { abrirRedLocal } from './red/servidor-red';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -18,6 +19,8 @@ async function bootstrap() {
   if (process.env.HOST) await app.listen(port, process.env.HOST);
   else await app.listen(port);
   console.log(`API lista en http://localhost:${port}/api`);
+  // Celulares de la red local (inventario): HTTPS con la CA propia de la PC.
+  abrirRedLocal(app.getHttpAdapter().getInstance());
 }
 
 /**

@@ -15,6 +15,7 @@ Sistema de ventas para minimarket que funciona **sin internet** en la PC de la t
 | Compras | Registro de factura del proveedor (serie y número únicos), contado o crédito, lotes con vencimiento. Suma stock, guarda el último costo y **sugiere precios** según el margen. Anulación con reversión de stock. |
 | Cuentas por pagar | Saldo por proveedor y por factura, pagos parciales con medio de pago y n.º de operación opcional. |
 | Inventario | Movimientos de stock (base del kardex), mermas valorizadas al costo, ajustes por conteo físico. |
+| Realizar inventario | Conteo físico con celulares por el WiFi de la tienda. El administrador da clic en **Iniciar** y aparece un QR; cada operador lo escanea, escribe su nombre y cuenta con la cámara (o busca por nombre los productos sin código). Los conteos llegan a la PC al instante. Si dos personas cuentan el mismo producto, la PC pregunta si se suman o se reemplazan. Se puede seguir vendiendo: al validar se aplica solo la diferencia entre lo contado y el stock que había al contar. Lista de no contados con opción de inhabilitarlos (el stock queda igual), vencimiento opcional por producto, y cada diferencia queda en el kardex como movimiento Inventario. Si el celular se cierra o pierde señal, lo contado se guarda en el teléfono y se reenvía. |
 | Alertas | Lotes vencidos (con botón "Enviar a merma"), por vencer, stock bajo el mínimo, facturas por vencer. |
 | Venta (POS) | Venta rápida con lector de barras, boleta (B001) o boleta libre (L001), precio 1/2/3, cliente opcional, pago mixto (efectivo, Yape, Plin, tarjeta) con vuelto, ticket de 80 mm. Atajos: F2 buscar, F4 comprobante, F6 precio, F7 cliente, F9 cobrar. |
 | Autorización | Descuentos, precios rebajados y anulaciones piden la clave del administrador cuando los hace un cajero. |
@@ -72,6 +73,15 @@ El backend sirve la interfaz compilada en el mismo puerto (`http://localhost:300
 5. Abre http://localhost:5173, ingresa con `admin` / `admin123` y **cambia la contraseña** en Configuración → Mi contraseña.
 
 Para desarrollo usa `npm run dev` en cada carpeta.
+
+## Celulares en la red local (HTTPS)
+
+La cámara del navegador solo funciona con conexión segura, así que el backend abre además:
+
+- `https://<IP de la PC>:3443`: la misma app y API, con un certificado firmado por una autoridad (CA) propia de la PC. Se crea sola en `backend/certificados-red/` y el certificado de la IP se renueva solo (al arrancar y cada 6 horas revisa si vence en menos de 60 días o si cambió la IP). La CA dura 20 años: los celulares no tienen que volver a instalar nada.
+- `http://<IP de la PC>:3080`: solo la página que abre el QR. Si el celular ya confía en la CA pasa directo a HTTPS; si no, muestra cómo instalar el certificado (Android e iPhone) una sola vez.
+
+Variables opcionales en `.env`: `RED_IP` (la IP que va en el QR, por ejemplo `192.168.18.90`), `HTTPS_PORT` (0 lo desactiva), `RED_HTTP_PORT` y `CERT_RED_DIR`. En el firewall de Windows hay que permitir los puertos 3443 y 3080 en la red privada.
 
 ## Backup en Google Drive
 

@@ -15,6 +15,7 @@ const TIPOS: Record<string, { label: string; clase: string }> = {
   ANULACION_VENTA: { label: 'Anula venta', clase: 'warn' },
   MERMA: { label: 'Merma', clase: 'danger' },
   AJUSTE: { label: 'Ajuste', clase: 'accent' },
+  INVENTARIO: { label: 'Inventario', clase: 'accent' },
 };
 
 export default function Inventario() {
