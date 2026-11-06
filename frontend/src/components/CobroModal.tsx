@@ -89,16 +89,31 @@ export default function CobroModal({
   /**
    * Elige un medio de pago con su tecla o su botón. Yape, Plin y tarjeta se llenan con lo que falta
    * (todo el total si aún no se escribió efectivo); el efectivo queda en "exacto" para escribir lo recibido.
+   * Si ya no falta nada, el monto se pasa al medio elegido: por ejemplo F2 y luego F3 cambia de Yape a Plin.
    */
   const elegir = (m: MedioPago) => {
     setActivo(m);
+    const sinMontos = (excepto?: MedioPago) =>
+      Object.fromEntries(OTROS.map((x) => [x, x === excepto ? otros[x] : { ...otros[x], monto: '' }]));
     if (m === 'EFECTIVO') {
+      // Si Yape, Plin o tarjeta ya cubren el total, el cobro pasa entero a efectivo.
+      if (sumaOtros >= total) setOtros(sinMontos());
       setEfectivo('');
     } else {
       const efectivoEscrito = efectivo === '' ? 0 : n(efectivo);
       const otrosSinEste = OTROS.filter((x) => x !== m).reduce((s, x) => s + n(otros[x].monto), 0);
-      setOtro(m, 'monto', String(Math.max(0, r2(total - efectivoEscrito - otrosSinEste))));
-      if (efectivo === '') setEfectivo('0');
+      const falta = r2(total - efectivoEscrito - otrosSinEste);
+      if (falta > 0) {
+        setOtro(m, 'monto', String(falta));
+        if (efectivo === '') setEfectivo('0');
+      } else {
+        // Ya estaba pagado: se cambia de medio. Se respeta el efectivo escrito si no cubre todo.
+        const resto = r2(total - efectivoEscrito);
+        const nuevos = sinMontos(m);
+        nuevos[m] = { ...otros[m], monto: String(resto > 0 ? resto : total) };
+        setOtros(nuevos);
+        if (efectivo === '' || resto <= 0) setEfectivo('0');
+      }
     }
     enfocar(m);
   };
