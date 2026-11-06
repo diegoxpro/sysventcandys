@@ -1,4 +1,5 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { lazy, Suspense } from 'react';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './auth';
 import Layout from './components/Layout';
 import Compras from './pages/Compras';
@@ -12,12 +13,19 @@ import Login from './pages/Login';
 import NuevaCompra from './pages/NuevaCompra';
 import Productos from './pages/Productos';
 import Proveedores from './pages/Proveedores';
+import RealizarInventario from './pages/RealizarInventario';
 import Reportes from './pages/Reportes';
 import Venta from './pages/Venta';
 import Ventas from './pages/Ventas';
 
+// Solo la cargan los celulares (trae el lector de códigos de barras).
+const MovilInventario = lazy(() => import('./pages/MovilInventario'));
+
 export default function App() {
   const { usuario, listo, esAdmin } = useAuth();
+  const { pathname } = useLocation();
+  // Celular del inventario: entra con el QR, sin usuario del sistema.
+  if (pathname.startsWith('/m/')) return <Suspense fallback={null}><MovilInventario /></Suspense>;
   if (!listo) return null;
   if (!usuario) {
     return (
@@ -44,6 +52,7 @@ export default function App() {
         )}
         <Route path="productos" element={<Productos />} />
         <Route path="inventario" element={<Inventario />} />
+        {esAdmin && <Route path="inventario/realizar" element={<RealizarInventario />} />}
         <Route path="compras" element={<Compras />} />
         {esAdmin && <Route path="compras/nueva" element={<NuevaCompra />} />}
         <Route path="compras/:id" element={<CompraDetalle />} />

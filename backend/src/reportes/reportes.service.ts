@@ -71,6 +71,7 @@ const MOVIMIENTO: Record<string, string> = {
   ANULACION_VENTA: 'Anulación de venta',
   MERMA: 'Merma',
   AJUSTE: 'Ajuste',
+  INVENTARIO: 'Inventario',
 };
 
 @Injectable()
@@ -557,8 +558,8 @@ export class ReportesService {
                COALESCE(SUM(cantidad) FILTER (WHERE tipo IN ('COMPRA', 'ANULACION_COMPRA')), 0) AS compras,
                COALESCE(SUM(-cantidad) FILTER (WHERE tipo IN ('VENTA', 'ANULACION_VENTA')), 0) AS ventas,
                COALESCE(SUM(-cantidad) FILTER (WHERE tipo = 'MERMA'), 0) AS mermas,
-               COALESCE(SUM(cantidad) FILTER (WHERE tipo IN ('AJUSTE', 'IMPORTACION') AND cantidad > 0), 0) AS "otrasEntradas",
-               COALESCE(SUM(-cantidad) FILTER (WHERE tipo IN ('AJUSTE', 'IMPORTACION') AND cantidad < 0), 0) AS "otrasSalidas"
+               COALESCE(SUM(cantidad) FILTER (WHERE tipo IN ('AJUSTE', 'INVENTARIO', 'IMPORTACION') AND cantidad > 0), 0) AS "otrasEntradas",
+               COALESCE(SUM(-cantidad) FILTER (WHERE tipo IN ('AJUSTE', 'INVENTARIO', 'IMPORTACION') AND cantidad < 0), 0) AS "otrasSalidas"
         FROM m GROUP BY "productoId"
       )
       SELECT p."codigoBarra" AS codigo, p.nombre AS producto, pr.inicial::float AS inicial,

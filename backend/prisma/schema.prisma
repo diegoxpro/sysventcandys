@@ -32,6 +32,7 @@ enum TipoMovimiento {
   ANULACION_VENTA
   MERMA
   AJUSTE
+  INVENTARIO
 }
 
 enum TipoDocumentoCompra {
@@ -77,6 +78,7 @@ model Usuario {
   edicionesVenta    VentaEdicion[]
   ventasAutorizadas Venta[]           @relation("VentaAutorizador")
   cajasAbiertas     Caja[]            @relation("CajaApertura")
+  inventarios       Inventario[]
   cajasCerradas     Caja[]            @relation("CajaCierre")
   movimientosCaja   MovimientoCaja[]
 }
@@ -174,6 +176,7 @@ model Producto {
   compraItems    CompraItem[]
   ventaItems     VentaItem[]
   presentaciones Presentacion[]
+  inventarioItems InventarioItem[]
 
   @@index([nombre])
 }
@@ -589,4 +592,97 @@ model ResumenDiario {
   mensaje         String?
   xmlFirmado      String?
   ventas          Venta[]
+}
+
+enum EstadoInventario {
+  // Los celulares pueden enviar conteos.
+  EN_CURSO
+  // Conteo cerrado: el administrador revisa y valida.
+  REVISION
+  VALIDADO
+  CANCELADO
+}
+
+enum EstadoConteo {
+  // Primer conteo del producto o conteo ya resuelto como suma/reemplazo.
+  APLICADO
+  // El producto ya tenía conteo: espera que el administrador elija.
+  PENDIENTE
+  SUMADO
+  REEMPLAZADO
+  DESCARTADO
+}
+
+// Inventario físico hecho con celulares. Se puede seguir vendiendo: cada
+// conteo guarda el stock del sistema en ese momento y al validar se aplica
+// solo la diferencia (contado - stock al contar) sobre el stock actual.
+model Inventario {
+  id          Int              @id @default(autoincrement())
+  // Va en el QR; los celulares lo usan en vez de iniciar sesión.
+  token       String           @unique
+  estado      EstadoInventario @default(EN_CURSO)
+  usuarioId   Int
+  inicio      DateTime         @default(now())
+  fin         DateTime?
+  validadoAt  DateTime?
+  observacion String?
+
+  usuario    Usuario               @relation(fields: [usuarioId], references: [id])
+  operadores InventarioOperador[]
+  items      InventarioItem[]
+  conteos    InventarioConteo[]
+
+  @@index([estado])
+}
+
+model InventarioOperador {
+  id           Int      @id @default(autoincrement())
+  inventarioId Int
+  nombre       String
+  // Lo guarda el celular para retomar si se cierra o se apaga.
+  token        String   @unique
+  createdAt    DateTime @default(now())
+  ultimoAcceso DateTime @default(now())
+
+  inventario Inventario         @relation(fields: [inventarioId], references: [id])
+  conteos    InventarioConteo[]
+}
+
+// Resultado por producto: lo que se tomará al validar.
+model InventarioItem {
+  id               Int       @id @default(autoincrement())
+  inventarioId     Int
+  productoId       Int
+  cantidad         Decimal   @db.Decimal(12, 3)
+  // Stock del sistema cuando se contó (el del conteo que define la cantidad).
+  stockReferencia  Decimal   @db.Decimal(12, 3)
+  fechaVencimiento DateTime? @db.Date
+  actualizado      DateTime  @default(now())
+
+  inventario Inventario         @relation(fields: [inventarioId], references: [id])
+  producto   Producto           @relation(fields: [productoId], references: [id])
+  conteos    InventarioConteo[]
+
+  @@unique([inventarioId, productoId])
+}
+
+// Cada envío de un celular, tal cual llegó.
+model InventarioConteo {
+  id               Int          @id @default(autoincrement())
+  inventarioId     Int
+  itemId           Int
+  operadorId       Int
+  cantidad         Decimal      @db.Decimal(12, 3)
+  stockAlContar    Decimal      @db.Decimal(12, 3)
+  fechaVencimiento DateTime?    @db.Date
+  estado           EstadoConteo @default(APLICADO)
+  // Id generado en el celular: si reenvía por mala señal no se duplica.
+  clienteId        String       @unique
+  fecha            DateTime     @default(now())
+
+  inventario Inventario         @relation(fields: [inventarioId], references: [id])
+  item       InventarioItem     @relation(fields: [itemId], references: [id])
+  operador   InventarioOperador @relation(fields: [operadorId], references: [id])
+
+  @@index([inventarioId, id])
 }
