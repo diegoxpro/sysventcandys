@@ -45,9 +45,10 @@ En la tienda se descomprime y se hace doble clic en `INSTALAR.bat` (las instrucc
 - Restaura un `.backup` de otra PC (con sus usuarios, ventas y caja) o crea una base nueva con `admin` y, si se quiere, importa el CSV de SysVent.
 - Copia el certificado SUNAT si hay una carpeta `secretos` junto al instalador o al backup.
 - Crea los accesos directos "Candy's Market" y "Cerrar Candy's Market" y, si se elige, el arranque al encender la PC.
-- Si la carpeta ya tiene una instalación, la actualiza: saca un backup, reemplaza `app\` y corre las migraciones.
+- Si la carpeta ya tiene una instalación, la actualiza: saca un backup, reemplaza `app\`, agrega a `config.env` las variables nuevas y corre las migraciones. `ACTUALIZAR.bat` hace solo esto y busca la instalación en `C:\CandysMarket` o `D:\CandysMarket`.
+- Pide permiso de administrador una vez para abrir en el firewall (red privada) los puertos 3443 y 3080 de los celulares. El certificado de red queda en `datos\certificados-red`, así sobrevive a las actualizaciones.
 
-El backend sirve la interfaz compilada en el mismo puerto (`http://localhost:3000`) cuando encuentra `frontend/dist` (o la carpeta de `FRONTEND_DIR`), así que en la tienda no se usa Vite. `HOST=127.0.0.1` hace que solo esa PC pueda entrar.
+El backend sirve la interfaz compilada en el mismo puerto (`http://localhost:3000`) cuando encuentra `frontend/dist` (o la carpeta de `FRONTEND_DIR`), así que en la tienda no se usa Vite. `HOST=127.0.0.1` hace que el puerto 3000 solo lo use esa PC; los celulares entran por 3443/3080.
 
 ## Instalación manual (Windows)
 

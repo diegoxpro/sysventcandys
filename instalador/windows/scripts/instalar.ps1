@@ -1,5 +1,6 @@
 # Instala o actualiza Candy's Market en esta PC.
-# Lo abre INSTALAR.bat; no necesita internet.
+# Lo abre INSTALAR.bat (o ACTUALIZAR.bat con -Actualizar); no necesita internet.
+param([switch]$Actualizar)
 . (Join-Path $PSScriptRoot 'comun.ps1')
 
 $Paquete = Split-Path -Parent $PSScriptRoot          # ...\paquete
@@ -78,6 +79,47 @@ function Crear-Accesos($conInicio) {
   }
 }
 
+# Los celulares del inventario entran por 3443 (HTTPS) y 3080 (página del QR).
+# Una regla para node.exe evita además el aviso del firewall de Windows.
+function Abrir-Firewall {
+  $regla = "Candys Market celulares"
+  $antes = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+  & netsh.exe advfirewall firewall show rule name="$regla" | Out-Null
+  $existe = ($LASTEXITCODE -eq 0)
+  $ErrorActionPreference = $antes
+  if ($existe) { return }
+  Write-Host 'Para que los celulares del inventario entren por el WiFi, Windows pedirá permiso de administrador.'
+  $cmd = "netsh advfirewall firewall add rule name=`"$regla`" dir=in action=allow program=`"$Node`" protocol=TCP localport=3443,3080 profile=private,domain"
+  try {
+    $p = Start-Process -FilePath "$env:SystemRoot\System32\cmd.exe" -ArgumentList "/c $cmd" -Verb RunAs -WindowStyle Hidden -Wait -PassThru
+    if ($p.ExitCode -eq 0) { Ok 'Firewall listo para los celulares.' } else { Aviso 'No se pudo abrir el firewall; el inventario con celulares no funcionará hasta permitirlo.' }
+  } catch {
+    Aviso 'Sin permiso de administrador no se abrió el firewall; el inventario con celulares no funcionará hasta permitirlo.'
+  }
+}
+
+# Agrega a config.env las variables nuevas de cada versión sin tocar las que ya están.
+function Completar-Config {
+  $lineas = [Collections.Generic.List[string]](Get-Content -LiteralPath $ConfigEnv -Encoding UTF8)
+  $faltan = [ordered]@{
+    'SECRETOS_DIR' = Join-Path $Datos 'secretos'
+    'BACKUP_LOCAL' = Join-Path $Datos 'backups'
+    'CERT_RED_DIR' = Join-Path $Datos 'certificados-red'
+  }
+  $cambio = $false
+  foreach ($k in $faltan.Keys) {
+    if (-not ($lineas | Where-Object { $_ -match "^\s*$k\s*=" })) { $lineas.Add("$k=`"$($faltan[$k])`""); $cambio = $true }
+  }
+  if ($cambio) { [IO.File]::WriteAllLines($ConfigEnv, $lineas, (New-Object Text.UTF8Encoding $false)) }
+}
+
+function Buscar-Instalacion {
+  foreach ($d in @('C:\CandysMarket', 'D:\CandysMarket')) {
+    if (Test-Path -LiteralPath (Join-Path $d 'datos\config.env')) { return $d }
+  }
+  return $null
+}
+
 Clear-Host
 Write-Host "Instalador de Candy's Market" -ForegroundColor Magenta
 Write-Host 'Puedes cerrar esta ventana en cualquier momento antes del final para cancelar.'
@@ -101,14 +143,18 @@ Ok "PostgreSQL $PgVersion encontrado en $PgBin"
 
 # ---------------------------------------------------------------- Carpeta
 Titulo 'Carpeta de instalación'
-$destino = Read-Host 'Dónde instalar [C:\CandysMarket]'
-if (-not $destino) { $destino = 'C:\CandysMarket' }
+$sugerida = Buscar-Instalacion
+if (-not $sugerida) { $sugerida = 'C:\CandysMarket' }
+if ($Actualizar) { $destino = Read-Host "Carpeta del sistema a actualizar [$sugerida]" }
+else { $destino = Read-Host "Dónde instalar [$sugerida]" }
+if (-not $destino) { $destino = $sugerida }
 $destino = Ruta $destino
 Usar-Rutas $destino
-$actualizar = Test-Path -LiteralPath $ConfigEnv
+$hayInstalacion = Test-Path -LiteralPath $ConfigEnv
+if ($Actualizar -and -not $hayInstalacion) { Falla "En $destino no hay una instalación de Candy's Market. Para instalar por primera vez usa INSTALAR.bat." }
 
 # ======================================================= Actualizar instalación
-if ($actualizar) {
+if ($hayInstalacion) {
   Aviso "Ya hay una instalación en $destino. Se actualizará el programa y tus datos se quedan igual."
   Aviso 'Antes se guarda una copia de seguridad de la base de datos.'
   if (-not (SiNo '¿Continuar?')) { Falla 'Cancelado. No se cambió nada.' }
@@ -123,6 +169,9 @@ if ($actualizar) {
   Copiar-Carpeta (Join-Path $Paquete 'app') $App
   Copiar-Carpeta (Join-Path $Paquete 'scripts') $Scripts
   Ok 'Programa copiado.'
+  Completar-Config
+  Cargar-Config $ConfigEnv | Out-Null
+  Abrir-Firewall
 
   Titulo 'Actualizando la base de datos'
   Push-Location $Backend
@@ -205,7 +254,8 @@ $config = @(
   'PORT=3000',
   'HOST=127.0.0.1',
   "SECRETOS_DIR=`"$(Join-Path $Datos 'secretos')`"",
-  "BACKUP_LOCAL=`"$(Join-Path $Datos 'backups')`""
+  "BACKUP_LOCAL=`"$(Join-Path $Datos 'backups')`"",
+  "CERT_RED_DIR=`"$(Join-Path $Datos 'certificados-red')`""
 )
 [IO.File]::WriteAllLines($ConfigEnv, $config, (New-Object Text.UTF8Encoding $false))
 Cargar-Config $ConfigEnv | Out-Null
@@ -257,6 +307,7 @@ foreach ($origen in @((Join-Path $Carpeta 'secretos'), $(if ($backup) { Join-Pat
 
 # ---------------------------------------------------------------- Accesos directos
 Titulo 'Accesos directos'
+Abrir-Firewall
 $conInicio = SiNo '¿Quieres que el sistema se abra solo al encender la PC?'
 Crear-Accesos $conInicio
 Ok 'En el escritorio quedaron "Candy''s Market" y "Cerrar Candy''s Market".'

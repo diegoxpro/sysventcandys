@@ -71,7 +71,7 @@ cp "$TRABAJO/node/node-$NODE_VERSION-win-x64/node.exe" "$TRABAJO/node/node-$NODE
 
 echo "== Scripts del instalador"
 cp -r "$REPO/instalador/windows/scripts" "$PAQ/paquete/scripts"
-cp "$REPO/instalador/windows/INSTALAR.bat" "$REPO/instalador/windows/LEEME.txt" "$PAQ/"
+cp "$REPO/instalador/windows/INSTALAR.bat" "$REPO/instalador/windows/ACTUALIZAR.bat" "$REPO/instalador/windows/LEEME.txt" "$PAQ/"
 # Windows: fin de línea CRLF; PowerShell 5 necesita BOM para leer las tildes.
 python3 - "$PAQ" <<'PY'
 import pathlib, sys
