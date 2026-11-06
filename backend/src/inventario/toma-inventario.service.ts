@@ -188,23 +188,13 @@ export class TomaInventarioService {
             });
             ajustados++;
           }
-          if (it.fechaVencimiento) await this.registrarVencimiento(tx, it.productoId, it.fechaVencimiento);
+          if (it.fechaVencimiento) await this.stock.fijarVencimiento(tx, it.productoId, it.fechaVencimiento, 'INVENTARIO');
         }
         await tx.inventario.update({ where: { id }, data: { estado: EstadoInventario.VALIDADO, validadoAt: new Date() } });
       },
       { timeout: 300_000, maxWait: 20_000 },
     );
     return { productos: items.length, ajustados };
-  }
-
-  /** Un solo vencimiento por producto: el stock que queda vence en esa fecha. */
-  private async registrarVencimiento(tx: Prisma.TransactionClient, productoId: number, fecha: Date) {
-    const p = await tx.producto.findUniqueOrThrow({ where: { id: productoId }, select: { stock: true } });
-    await tx.lote.updateMany({ where: { productoId, cantidad: { not: 0 } }, data: { cantidad: 0 } });
-    await tx.producto.update({ where: { id: productoId }, data: { controlaVencimiento: true } });
-    if (p.stock.greaterThan(0)) {
-      await tx.lote.create({ data: { productoId, fechaVencimiento: fecha, cantidad: p.stock, codigo: 'INVENTARIO' } });
-    }
   }
 
   // ---------- Celular ----------

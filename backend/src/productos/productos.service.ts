@@ -11,6 +11,8 @@ export interface FiltroProductos {
   porPagina?: number;
 }
 
+const aFecha = (v: string) => new Date(`${v.slice(0, 10)}T00:00:00Z`);
+
 const incluir = {
   categoria: true,
   marca: true,
@@ -79,15 +81,21 @@ export class ProductosService {
   }
 
   async crear(dto: CrearProductoDto, usuarioId: number) {
-    const { stockInicial, presentaciones, ...data } = dto;
+    const { stockInicial, presentaciones, fechaVencimiento, ...data } = dto;
     await this.validarCodigo(data.codigoBarra);
     await this.validarPresentaciones(presentaciones, data.codigoBarra);
     return this.prisma.$transaction(async (tx) => {
       const p = await tx.producto.create({ data: { ...data, codigoBarra: data.codigoBarra?.trim() || null } });
       if (presentaciones) await this.guardarPresentaciones(tx, p.id, presentaciones);
       if (stockInicial) {
+        // El stock inicial entra en un lote si se indicó cuándo vence.
+        const lote =
+          data.controlaVencimiento && fechaVencimiento
+            ? await tx.lote.create({ data: { productoId: p.id, fechaVencimiento: aFecha(fechaVencimiento), cantidad: 0, codigo: 'INICIAL' } })
+            : null;
         await this.stock.mover(tx, {
           productoId: p.id,
+          loteId: lote?.id,
           tipo: TipoMovimiento.AJUSTE,
           cantidad: stockInicial,
           costoUnitario: data.costo,
@@ -100,7 +108,7 @@ export class ProductosService {
   }
 
   async editar(id: number, dto: EditarProductoDto) {
-    const { revisado, presentaciones, ...data } = dto;
+    const { revisado, presentaciones, fechaVencimiento, ...data } = dto;
     if (data.codigoBarra !== undefined) await this.validarCodigo(data.codigoBarra, id);
     if (presentaciones) {
       const actual = await this.prisma.producto.findUnique({ where: { id } });
@@ -116,6 +124,9 @@ export class ProductosService {
         },
       });
       if (presentaciones) await this.guardarPresentaciones(tx, id, presentaciones);
+      if (fechaVencimiento && data.controlaVencimiento !== false) {
+        await this.stock.fijarVencimiento(tx, id, aFecha(fechaVencimiento), 'PRODUCTO');
+      }
       return tx.producto.findUniqueOrThrow({ where: { id }, include: incluir });
     });
   }

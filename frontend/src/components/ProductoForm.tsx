@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
-import { equivalencia, fecha, margenReal, money, n, precioSugerido, qty } from '../format';
+import { diasHasta, equivalencia, fecha, margenReal, money, n, precioSugerido, qty } from '../format';
 import { Catalogo, Configuracion, Producto } from '../types';
 import { Campo, Modal, useCarga, useToast } from './ui';
 
@@ -67,6 +67,18 @@ export default function ProductoForm({ producto, inicial, desdeCompra, onClose, 
   );
   const setP = (i: number, k: keyof FilaPresentacion, v: string) => setPres((l) => l.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
   const presIncompleta = pres.some((x) => !x.nombre.trim() || n(x.factor) <= 1 || n(x.precio1) <= 0);
+  // Una sola fecha por producto (igual que en el inventario): todo el stock vence ese día.
+  const [vence, setVence] = useState('');
+  const [venceInicial, setVenceInicial] = useState('');
+  const fechasLotes = [...new Set((detalle?.lotes ?? []).map((l) => l.fechaVencimiento.slice(0, 10)))].sort();
+  useEffect(() => {
+    if (!detalle) return;
+    const primera = fechasLotes[0] ?? '';
+    setVence(primera);
+    setVenceInicial(primera);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detalle]);
+  const stockActual = producto ? n(producto.stock) : n(f.stockInicial);
   const [revisado, setRevisado] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const set = (k: keyof typeof f, v: string | boolean) => setF((x) => ({ ...x, [k]: v }));
@@ -117,6 +129,8 @@ export default function ProductoForm({ producto, inicial, desdeCompra, onClose, 
       margen3: optNum(f.margen3),
       stockMinimo: n(f.stockMinimo),
       controlaVencimiento: f.controlaVencimiento,
+      // Solo se manda si cambió, para no rehacer los lotes en cada guardado.
+      ...(f.controlaVencimiento && vence && vence !== venceInicial ? { fechaVencimiento: vence } : {}),
       activo: f.activo,
       presentaciones: pres.map((x) => ({
         id: x.id,
@@ -341,6 +355,33 @@ export default function ProductoForm({ producto, inicial, desdeCompra, onClose, 
             </label>
           </div>
         </div>
+
+        {f.controlaVencimiento && (
+          <div className="grid-4">
+            <Campo
+              label="Fecha de vencimiento"
+              ayuda={
+                vence && diasHasta(vence) < 0
+                  ? 'Esta fecha ya pasó: el producto saldrá como vencido'
+                  : vence && vence !== venceInicial && fechasLotes.length > 1
+                    ? 'Todo el stock vencerá en esta fecha'
+                    : 'Opcional. Las compras pueden traer otra fecha'
+              }
+            >
+              <input type="date" value={vence} onChange={(e) => setVence(e.target.value)} />
+            </Campo>
+            {vence && stockActual <= 0 && (
+              <div className="small muted span-3" style={{ alignSelf: 'center' }}>
+                {producto ? 'El producto no tiene stock: la fecha se registrará cuando entre mercadería en una compra.' : 'Pon el stock inicial para que esa cantidad quede con esta fecha.'}
+              </div>
+            )}
+            {fechasLotes.length > 1 && vence === venceInicial && (
+              <div className="small muted span-3" style={{ alignSelf: 'center' }}>
+                Hay {fechasLotes.length} lotes con fechas distintas (abajo). Si cambias la fecha, todo el stock vencerá en la nueva.
+              </div>
+            )}
+          </div>
+        )}
 
         {detalle?.lotes && detalle.lotes.length > 0 && (
           <div>

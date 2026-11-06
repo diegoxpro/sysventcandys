@@ -57,4 +57,17 @@ export class StockService {
       },
     });
   }
+
+  /**
+   * Un solo vencimiento por producto: todo el stock que queda vence en esa fecha.
+   * Los lotes anteriores quedan en cero y se crea uno nuevo con el stock actual.
+   */
+  async fijarVencimiento(tx: Prisma.TransactionClient, productoId: number, fecha: Date, codigo: string) {
+    const p = await tx.producto.findUniqueOrThrow({ where: { id: productoId }, select: { stock: true } });
+    await tx.lote.updateMany({ where: { productoId, cantidad: { not: 0 } }, data: { cantidad: 0 } });
+    await tx.producto.update({ where: { id: productoId }, data: { controlaVencimiento: true } });
+    if (p.stock.greaterThan(0)) {
+      await tx.lote.create({ data: { productoId, fechaVencimiento: fecha, cantidad: p.stock, codigo } });
+    }
+  }
 }

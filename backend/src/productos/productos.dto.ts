@@ -4,6 +4,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsBoolean,
+  IsDateString,
   IsEnum,
   IsInt,
   IsNumber,
@@ -43,6 +44,8 @@ export class ProductoDto {
   @IsOptional() @IsNumber() @Min(0) stockMinimo?: number;
   @IsOptional() @IsEnum(AfectacionIgv) afectacionIgv?: AfectacionIgv;
   @IsOptional() @IsBoolean() controlaVencimiento?: boolean;
+  /** Fecha en que vence el stock del producto (aaaa-mm-dd). Solo si controla vencimiento. */
+  @IsOptional() @IsDateString() fechaVencimiento?: string | null;
   @IsOptional() @IsBoolean() activo?: boolean;
   /** Lista completa: las que no vengan se desactivan. */
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => PresentacionDto)
