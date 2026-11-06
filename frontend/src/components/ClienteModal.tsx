@@ -16,6 +16,25 @@ export default function ClienteModal({ onElegir, onClose }: { onElegir: (c: Clie
     if (/^\d{11}$/.test(q)) setNuevo((n) => ({ ...n, tipoDoc: 'RUC', numeroDoc: q }));
   }, [q]);
 
+  const [buscando, setBuscando] = useState(false);
+  const largo = nuevo.tipoDoc === 'DNI' ? 8 : nuevo.tipoDoc === 'RUC' ? 11 : 0;
+  // Busca el documento (clientes guardados y, si hay token, RENIEC/SUNAT). Sin internet solo avisa.
+  const consultar = async () => {
+    setBuscando(true);
+    try {
+      const r = await api<{ fuente: 'local'; cliente: Cliente } | { fuente: 'externa'; datos: { nombre: string } } | { fuente: null; mensaje: string }>(
+        `/clientes/consulta/${nuevo.tipoDoc}/${nuevo.numeroDoc}`,
+      );
+      if (r.fuente === 'local') return onElegir(r.cliente);
+      if (r.fuente === 'externa') setNuevo((x) => ({ ...x, nombre: r.datos.nombre }));
+      else avisar(r.mensaje, true);
+    } catch (e) {
+      avisar((e as Error).message, true);
+    } finally {
+      setBuscando(false);
+    }
+  };
+
   const crear = async () => {
     try {
       onElegir(await api<Cliente>('/clientes', { body: { ...nuevo, numeroDoc: nuevo.numeroDoc || undefined } }));
@@ -56,7 +75,14 @@ export default function ClienteModal({ onElegir, onClose }: { onElegir: (c: Clie
             </Campo>
             <Campo label="Nombre"><input value={nuevo.nombre} onChange={(e) => setNuevo({ ...nuevo, nombre: e.target.value })} /></Campo>
           </div>
-          <div><button className="btn" onClick={crear} disabled={nuevo.nombre.trim().length < 2}>Guardar y usar</button></div>
+          <div className="row" style={{ gap: 8 }}>
+            {largo > 0 && (
+              <button className="btn" onClick={consultar} disabled={nuevo.numeroDoc.length !== largo || buscando}>
+                {buscando ? 'Buscando…' : `Buscar ${nuevo.tipoDoc}`}
+              </button>
+            )}
+            <button className="btn" onClick={crear} disabled={nuevo.nombre.trim().length < 2}>Guardar y usar</button>
+          </div>
         </div>
       </div>
     </Modal>

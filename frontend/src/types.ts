@@ -128,6 +128,8 @@ export interface Sugerencia {
 }
 
 export interface Configuracion {
+  /** El token no llega al navegador: solo si está puesto. */
+  consultaDocConfigurada?: boolean;
   empresaNombre: string;
   empresaRuc: string | null;
   empresaDireccion: string | null;
@@ -225,6 +227,10 @@ export interface Cliente {
   numeroDoc: string | null;
   nombre: string;
   direccion: string | null;
+  telefono?: string | null;
+  email?: string | null;
+  notas?: string | null;
+  activo?: boolean;
 }
 
 export interface Serie {

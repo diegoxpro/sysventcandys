@@ -103,10 +103,11 @@ export default function Layout() {
             <span className="grow">Inicio</span>
             {nAlertas > 0 && <span className="pill" aria-label={`${nAlertas} alertas`}>{nAlertas}</span>}
           </NavLink>
-          <Seccion id="ventas" titulo="Ventas" icono="venta" rutas={['/venta', '/caja', '/ventas']} {...sec}>
+          <Seccion id="ventas" titulo="Ventas" icono="venta" rutas={['/venta', '/caja', '/ventas', '/clientes']} {...sec}>
             <Enlace to="/venta" icono="venta">Venta</Enlace>
             <Enlace to="/caja" icono="caja">Caja</Enlace>
             <Enlace to="/ventas" icono="lista">Ventas realizadas</Enlace>
+            <Enlace to="/clientes" icono="clientes">Clientes</Enlace>
           </Seccion>
           <Seccion id="compras" titulo="Compras" icono="compras" rutas={['/compras', '/cuentas-por-pagar', '/proveedores']} {...sec}>
             <Enlace to="/compras" icono="compras">Compras</Enlace>
