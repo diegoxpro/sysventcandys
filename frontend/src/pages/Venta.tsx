@@ -6,7 +6,7 @@ import { BORRADOR_VENTA, guardarBorrador, leerBorrador } from '../borrador';
 import BuscadorProducto from '../components/BuscadorProducto';
 import ClienteModal from '../components/ClienteModal';
 import CobroModal, { PagoVenta } from '../components/CobroModal';
-import { Kbd, useAtajos, useCarga, useToast } from '../components/ui';
+import { Kbd, Modal, useAtajos, useCarga, useToast } from '../components/ui';
 import { money, n, qty } from '../format';
 import { correlativo, imprimirVenta } from '../ticket';
 import { Caja, Cliente, COMPROBANTE_LABEL, Configuracion, Presentacion, Producto, Serie, TipoComprobante, Venta as TVenta } from '../types';
@@ -58,6 +58,8 @@ export default function Venta() {
   const [enviando, setEnviando] = useState(false);
   const [eligiendoCliente, setEligiendoCliente] = useState(false);
   const [ventaPrevia, setVentaPrevia] = useState<TVenta | null>(null);
+  /** Línea que se pidió quitar con Supr; mientras exista se muestra la confirmación. */
+  const [porQuitar, setPorQuitar] = useState<string | null>(null);
 
   // La venta en curso sobrevive a cambiar de módulo, recargar o cerrar la pestaña.
   useEffect(() => guardarBorrador(BORRADOR_VENTA, b), [b]);
@@ -114,6 +116,15 @@ export default function Venta() {
     const l = b.lineas[i];
     if (cantidad > l.cantidad && !hayStock(l.producto, unidadesEnCarrito(l.producto.id, i) + cantidad * factorDe(l))) return;
     setLinea(i, { cantidad });
+  };
+
+  // Quita una línea y deja marcada la de al lado, para poder seguir quitando con Supr.
+  const quitar = (clave: string) => {
+    const i = b.lineas.findIndex((l) => claveDe(l.producto, l.presentacion) === clave);
+    if (i < 0) return;
+    const vecina = b.lineas[i + 1] ?? b.lineas[i - 1];
+    setB((x) => ({ ...x, lineas: x.lineas.filter((l) => claveDe(l.producto, l.presentacion) !== clave) }));
+    setUltimo(vecina ? claveDe(vecina.producto, vecina.presentacion) : null);
   };
 
   const limpiar = useCallback(() => {
@@ -184,6 +195,30 @@ export default function Venta() {
     { activo: !!caja },
   );
 
+  // Supr pide quitar el producto marcado; ↑ y ↓ cambian cuál está marcado.
+  // No interfiere al escribir: si el cursor está en un campo con texto, las teclas hacen lo de siempre.
+  useEffect(() => {
+    if (!caja) return;
+    const tecla = (e: KeyboardEvent) => {
+      if (!['Delete', 'ArrowUp', 'ArrowDown'].includes(e.key) || !b.lineas.length) return;
+      if (document.querySelector('[aria-modal="true"]')) return;
+      const foco = document.activeElement;
+      const enCampo = foco instanceof HTMLInputElement || foco instanceof HTMLTextAreaElement || foco instanceof HTMLSelectElement;
+      // En el buscador vacío sí valen; en cantidad, precio o con texto escrito, no.
+      if (enCampo && !(foco === buscador.current && !buscador.current.value)) return;
+      const claves = b.lineas.map((l) => claveDe(l.producto, l.presentacion));
+      const i = ultimo ? claves.indexOf(ultimo) : -1;
+      e.preventDefault();
+      if (e.key === 'Delete') return setPorQuitar(i >= 0 ? claves[i] : claves[claves.length - 1]);
+      const j = i < 0 ? claves.length - 1 : e.key === 'ArrowUp' ? Math.max(i - 1, 0) : Math.min(i + 1, claves.length - 1);
+      setUltimo(claves[j]);
+    };
+    window.addEventListener('keydown', tecla);
+    return () => window.removeEventListener('keydown', tecla);
+  }, [caja, b.lineas, ultimo]);
+
+  const lineaPorQuitar = porQuitar ? b.lineas.find((l) => claveDe(l.producto, l.presentacion) === porQuitar) : undefined;
+
   if (cargandoCaja) return null;
   if (!caja) {
     return (
@@ -234,7 +269,13 @@ export default function Venta() {
             </thead>
             <tbody>
               {b.lineas.map((l, i) => (
-                <tr key={claveDe(l.producto, l.presentacion)} className={ultimo === claveDe(l.producto, l.presentacion) ? 'ultimo' : ''}>
+                <tr
+                  key={claveDe(l.producto, l.presentacion)}
+                  className={ultimo === claveDe(l.producto, l.presentacion) ? 'ultimo' : ''}
+                  // Clic o foco en la fila la marca, para quitarla con Supr.
+                  onMouseDown={() => setUltimo(claveDe(l.producto, l.presentacion))}
+                  onFocus={() => setUltimo(claveDe(l.producto, l.presentacion))}
+                >
                   <td>
                     {l.producto.nombre}
                     {l.presentacion && <span className="badge info" style={{ marginLeft: 6 }}>{l.presentacion.nombre} · {qty(l.presentacion.factor)} und</span>}
@@ -298,6 +339,7 @@ export default function Venta() {
           <span><Kbd>F7</Kbd> Cliente</span>
           <span><Kbd>F8</Kbd> Descuento</span>
           <span><Kbd>F9</Kbd> Cobrar</span>
+          <span><Kbd>Supr</Kbd> Quitar producto</span>
           <span><Kbd>F10</Kbd> Cancelar venta</span>
         </div>
       </div>
@@ -348,6 +390,14 @@ export default function Venta() {
           onConfirmar={cobrar}
         />
       )}
+      {lineaPorQuitar && (
+        <ConfirmarQuitar
+          linea={lineaPorQuitar}
+          importe={importe(lineaPorQuitar)}
+          onCancelar={() => (setPorQuitar(null), enfocar())}
+          onConfirmar={() => (quitar(porQuitar!), setPorQuitar(null), enfocar())}
+        />
+      )}
       {eligiendoCliente && (
         <ClienteModal
           onClose={() => (setEligiendoCliente(false), enfocar())}
@@ -355,5 +405,30 @@ export default function Venta() {
         />
       )}
     </div>
+  );
+}
+
+/** Confirmación al quitar un producto con Supr: Enter elimina, Esc cancela. */
+function ConfirmarQuitar({ linea, importe, onCancelar, onConfirmar }: { linea: Linea; importe: number; onCancelar: () => void; onConfirmar: () => void }) {
+  // Enter elimina, salvo que el foco esté en un botón (entonces vale ese botón, p. ej. Cancelar con Tab).
+  useAtajos({ Enter: (e) => (document.activeElement instanceof HTMLButtonElement ? (document.activeElement as HTMLButtonElement).click() : onConfirmar(), void e) }, { enModal: true });
+  return (
+    <Modal
+      titulo="Eliminar producto"
+      onClose={onCancelar}
+      pie={
+        <>
+          <button className="btn" onClick={onCancelar}>Cancelar <Kbd>Esc</Kbd></button>
+          <button className="btn btn-danger" onClick={onConfirmar}>Eliminar <Kbd>Enter</Kbd></button>
+        </>
+      }
+    >
+      <p style={{ margin: 0 }}>¿Desea eliminar este producto?</p>
+      <p style={{ margin: '8px 0 0' }}>
+        <b>{linea.producto.nombre}</b>
+        {linea.presentacion && <> · {linea.presentacion.nombre}</>}
+        <span className="muted"> · cantidad {qty(linea.cantidad)} · {money(importe)}</span>
+      </p>
+    </Modal>
   );
 }
