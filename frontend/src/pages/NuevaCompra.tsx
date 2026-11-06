@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { BORRADOR_COMPRA, borrarBorrador, guardarBorrador, leerBorrador } from '../borrador';
 import BuscadorProducto from '../components/BuscadorProducto';
+import BuscadorProveedor from '../components/BuscadorProveedor';
 import ProductoForm from '../components/ProductoForm';
 import ProveedorForm from '../components/ProveedorForm';
 import SugerenciasModal from '../components/SugerenciasModal';
@@ -25,7 +26,13 @@ interface Linea {
 /** La línea lleva lote y fecha: el producto ya controla vencimiento o se marcó "Añadir venc.". */
 const llevaVenc = (l: Linea) => l.producto.controlaVencimiento || !!l.conVenc;
 
-function enDias(dias: number) {
+function enDias(dias: number, desde?: string) {
+  if (desde) {
+    // Desde la fecha de la factura: se suma en UTC para que no cambie el día por la zona horaria.
+    const d = new Date(`${desde}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + dias);
+    return d.toISOString().slice(0, 10);
+  }
   const d = new Date(Date.now() + dias * 86_400_000);
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 }
@@ -61,7 +68,8 @@ export default function NuevaCompra() {
   const navegar = useNavigate();
   const buscador = useRef<HTMLInputElement>(null);
   const { data: proveedores, setData: setProveedores } = useCarga(() => api<Proveedor[]>('/proveedores'), []);
-  const [nuevoProveedor, setNuevoProveedor] = useState(false);
+  // Lo escrito en el buscador de proveedor cuando no existe: se abre su registro con eso ya puesto.
+  const [nuevoProveedor, setNuevoProveedor] = useState<string | null>(null);
   // Lo escaneado o escrito que no existe: se abre el registro del producto con eso ya puesto.
   const [nuevoProducto, setNuevoProducto] = useState<string | null>(null);
   // La compra en curso se recupera al volver al módulo, recargar o reabrir el navegador.
@@ -73,6 +81,15 @@ export default function NuevaCompra() {
   const [enviando, setEnviando] = useState(false);
   const [resultado, setResultado] = useState<{ compra: Compra; sugerencias: Sugerencia[] } | null>(null);
   const setC = (k: keyof typeof cab, v: string) => setCab((x) => ({ ...x, [k]: v }));
+  const proveedor = proveedores?.find((p) => String(p.id) === cab.proveedorId) ?? null;
+
+  /** Si el proveedor da crédito (ej. Backus), se propone Crédito con la fecha de pago según sus días. */
+  const elegirProveedor = (p: Proveedor) =>
+    setCab((x) => ({
+      ...x,
+      proveedorId: String(p.id),
+      ...(p.diasCredito ? { condicion: 'CREDITO' as const, fechaVencimiento: enDias(p.diasCredito, x.fechaEmision) } : {}),
+    }));
 
   useEffect(() => {
     if (!terminado.current) guardarBorrador(BORRADOR_COMPRA, { cab, lineas });
@@ -172,15 +189,10 @@ export default function NuevaCompra() {
         <div className="grid-4">
           <Campo label="Proveedor" className="span-2">
             <div className="row" style={{ flexWrap: 'nowrap', gap: 6 }}>
-              <select value={cab.proveedorId} onChange={(e) => setC('proveedorId', e.target.value)}>
-                <option value="">Elige un proveedor</option>
-                {proveedores?.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.nombreComercial ? `${p.nombreComercial} · ` : ''}{p.razonSocial}
-                  </option>
-                ))}
-              </select>
-              <button type="button" className="btn" onClick={() => setNuevoProveedor(true)}>Nuevo</button>
+              <div className="grow">
+                <BuscadorProveedor proveedores={proveedores ?? []} elegido={proveedor} onElegir={elegirProveedor} onNuevo={setNuevoProveedor} />
+              </div>
+              <button type="button" className="btn" onClick={() => setNuevoProveedor('')}>Nuevo</button>
             </div>
           </Campo>
           <Campo label="Documento">
@@ -192,7 +204,10 @@ export default function NuevaCompra() {
             <Campo label="Serie"><input className="mono" value={cab.serie} onChange={(e) => setC('serie', e.target.value.toUpperCase())} placeholder="F001" /></Campo>
             <Campo label="Número"><input className="mono" value={cab.numero} onChange={(e) => setC('numero', e.target.value.replace(/\D/g, ''))} /></Campo>
           </div>
-          <Campo label="Fecha de emisión"><input type="date" value={cab.fechaEmision} onChange={(e) => setC('fechaEmision', e.target.value)} /></Campo>
+          <Campo label="Fecha de emisión"><input type="date" value={cab.fechaEmision} onChange={(e) => {
+                const fecha = e.target.value;
+                setCab((x) => ({ ...x, fechaEmision: fecha, ...(fecha && x.condicion === 'CREDITO' && proveedor?.diasCredito ? { fechaVencimiento: enDias(proveedor.diasCredito, fecha) } : {}) }));
+              }} /></Campo>
           <Campo label="Condición">
             <select value={cab.condicion} onChange={(e) => setC('condicion', e.target.value)}>
               <option value="CONTADO">Contado</option>
@@ -300,13 +315,14 @@ export default function NuevaCompra() {
         </div>
       </div>
 
-      {nuevoProveedor && (
+      {nuevoProveedor !== null && (
         <ProveedorForm
-          onClose={() => setNuevoProveedor(false)}
+          inicial={nuevoProveedor}
+          onClose={() => setNuevoProveedor(null)}
           onGuardado={(p) => {
-            setProveedores((l) => [...(l ?? []), p].sort((a, b) => a.razonSocial.localeCompare(b.razonSocial)));
-            setC('proveedorId', String(p.id));
-            setNuevoProveedor(false);
+            setProveedores((l) => [...(l ?? []).filter((x) => x.id !== p.id), p].sort((a, b) => a.razonSocial.localeCompare(b.razonSocial)));
+            elegirProveedor(p);
+            setNuevoProveedor(null);
           }}
         />
       )}
