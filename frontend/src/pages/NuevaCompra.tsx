@@ -18,7 +18,12 @@ interface Linea {
   costo: string;
   codigoLote: string;
   fechaVencimiento: string;
+  /** Producto que no controla vencimiento pero en esta compra se le anota uno. */
+  conVenc?: boolean;
 }
+
+/** La línea lleva lote y fecha: el producto ya controla vencimiento o se marcó "Añadir venc.". */
+const llevaVenc = (l: Linea) => l.producto.controlaVencimiento || !!l.conVenc;
 
 function enDias(dias: number) {
   const d = new Date(Date.now() + dias * 86_400_000);
@@ -90,6 +95,7 @@ export default function NuevaCompra() {
       return [...ls, { producto: p, presentacion, cantidad: '1', costo: costo > 0 ? String(costo) : '', codigoLote: '', fechaVencimiento: '' }];
     });
   };
+  const setVenc = (i: number, v: boolean) => setLineas((ls) => ls.map((l, j) => (j === i ? { ...l, conVenc: v, ...(v ? {} : { codigoLote: '', fechaVencimiento: '' }) } : l)));
   const setL = (i: number, k: keyof Linea, v: string) => setLineas((ls) => ls.map((l, j) => (j === i ? { ...l, [k]: v } : l)));
   const setImporte = (i: number, v: string) => {
     const c = n(lineas[i].cantidad);
@@ -102,7 +108,7 @@ export default function NuevaCompra() {
     (!cab.serie.trim() || !cab.numero.trim()) && 'serie y número',
     !lineas.length && 'productos',
     lineas.some((l) => n(l.cantidad) <= 0 || l.costo === '') && 'cantidad y costo de cada producto',
-    lineas.some((l) => l.producto.controlaVencimiento && !l.fechaVencimiento) && 'fecha de vencimiento',
+    lineas.some((l) => llevaVenc(l) && !l.fechaVencimiento) && 'fecha de vencimiento',
   ].filter(Boolean);
 
   const guardar = async () => {
@@ -124,8 +130,8 @@ export default function NuevaCompra() {
             presentacionId: l.presentacion?.id,
             cantidad: n(l.cantidad),
             costoUnitario: n(l.costo),
-            codigoLote: l.codigoLote.trim() || undefined,
-            fechaVencimiento: l.fechaVencimiento || undefined,
+            codigoLote: (llevaVenc(l) && l.codigoLote.trim()) || undefined,
+            fechaVencimiento: (llevaVenc(l) && l.fechaVencimiento) || undefined,
           })),
         },
       });
@@ -257,13 +263,16 @@ export default function NuevaCompra() {
                     />
                   </td>
                   <td>
-                    {l.producto.controlaVencimiento ? (
-                      <div className="row" style={{ flexWrap: 'nowrap', gap: 6 }}>
+                    {!l.producto.controlaVencimiento && (
+                      <label className="check small" title="Anota la fecha de esta compra; el producto pasa a controlar vencimiento">
+                        <input type="checkbox" checked={!!l.conVenc} onChange={(e) => setVenc(i, e.target.checked)} /> Añadir venc.
+                      </label>
+                    )}
+                    {llevaVenc(l) && (
+                      <div className="row" style={{ flexWrap: 'nowrap', gap: 6, marginTop: l.conVenc ? 4 : 0 }}>
                         <input placeholder="Lote" value={l.codigoLote} onChange={(e) => setL(i, 'codigoLote', e.target.value)} style={{ width: 90 }} />
-                        <input type="date" value={l.fechaVencimiento} onChange={(e) => setL(i, 'fechaVencimiento', e.target.value)} aria-label="Vencimiento" />
+                        <input type="date" value={l.fechaVencimiento} onChange={(e) => setL(i, 'fechaVencimiento', e.target.value)} aria-label="Vencimiento" autoFocus={l.conVenc} />
                       </div>
-                    ) : (
-                      <span className="small muted">No controla vencimiento</span>
                     )}
                   </td>
                   <td>
