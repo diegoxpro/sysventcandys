@@ -158,8 +158,12 @@ export class ComprasService {
           referencia,
           motivo: nombre ? `${i.cantidad} ${nombre} (x${factor}) a S/ ${i.costoUnitario}` : undefined,
         });
-        // Se guarda el último costo de compra, siempre por unidad.
-        await tx.producto.update({ where: { id: i.productoId }, data: { costo: costoUnidad } });
+        // Se guarda el último costo de compra, siempre por unidad. Si la línea trae
+        // vencimiento, el producto pasa a controlarlo ("Añadir venc." en la compra).
+        await tx.producto.update({
+          where: { id: i.productoId },
+          data: { costo: costoUnidad, ...(i.fechaVencimiento ? { controlaVencimiento: true } : {}) },
+        });
       }
 
       if (contado && total > 0) {
