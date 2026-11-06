@@ -17,7 +17,17 @@ interface FilaPresentacion {
   precio3: string;
 }
 
-export default function ProductoForm({ producto, onClose, onGuardado }: { producto?: Producto; onClose: () => void; onGuardado: () => void }) {
+interface Props {
+  producto?: Producto;
+  /** Datos para empezar un producto nuevo (p. ej. el código escaneado en una compra). */
+  inicial?: { codigoBarra?: string; nombre?: string };
+  /** Se registra desde una compra: el stock entra con la compra, no se pide stock inicial. */
+  desdeCompra?: boolean;
+  onClose: () => void;
+  onGuardado: (p: Producto) => void;
+}
+
+export default function ProductoForm({ producto, inicial, desdeCompra, onClose, onGuardado }: Props) {
   const avisar = useToast();
   const { esAdmin } = useAuth();
   const { data: cfg } = useCarga(() => api<Configuracion>('/configuracion'), []);
@@ -26,8 +36,8 @@ export default function ProductoForm({ producto, onClose, onGuardado }: { produc
   const { data: detalle } = useCarga(() => (producto ? api<Producto>(`/productos/${producto.id}`) : Promise.resolve(null)), [producto?.id]);
 
   const [f, setF] = useState({
-    codigoBarra: producto?.codigoBarra ?? '',
-    nombre: producto?.nombre ?? '',
+    codigoBarra: producto?.codigoBarra ?? inicial?.codigoBarra ?? '',
+    nombre: producto?.nombre ?? inicial?.nombre?.toUpperCase() ?? '',
     categoriaId: producto?.categoriaId ?? '',
     marcaId: producto?.marcaId ?? '',
     unidad: producto?.unidad ?? 'UND',
@@ -117,12 +127,12 @@ export default function ProductoForm({ producto, onClose, onGuardado }: { produc
         precio2: n(x.precio2) || n(x.precio1),
         precio3: n(x.precio3) || n(x.precio1),
       })),
-      ...(producto ? { revisado } : { stockInicial: n(f.stockInicial) || undefined }),
+      ...(producto ? { revisado } : { stockInicial: (!desdeCompra && n(f.stockInicial)) || undefined }),
     };
     try {
-      await api(producto ? `/productos/${producto.id}` : '/productos', { method: producto ? 'PATCH' : 'POST', body });
-      avisar(producto ? 'Producto actualizado' : 'Producto creado');
-      onGuardado();
+      const guardado = await api<Producto>(producto ? `/productos/${producto.id}` : '/productos', { method: producto ? 'PATCH' : 'POST', body });
+      avisar(producto ? 'Producto actualizado' : desdeCompra ? 'Producto creado y agregado a la compra' : 'Producto creado');
+      onGuardado(guardado);
     } catch (e) {
       avisar((e as Error).message, true);
     } finally {
@@ -140,7 +150,7 @@ export default function ProductoForm({ producto, onClose, onGuardado }: { produc
           <>
             <button className="btn" onClick={onClose}>Cancelar</button>
             <button className="btn btn-primary" onClick={guardar} disabled={enviando || f.nombre.trim().length < 2 || n(f.precio1) <= 0 || presIncompleta}>
-              Guardar
+              {desdeCompra ? 'Guardar y agregar a la compra' : 'Guardar'}
             </button>
           </>
         )
@@ -157,12 +167,19 @@ export default function ProductoForm({ producto, onClose, onGuardado }: { produc
             </label>
           </div>
         )}
+        {desdeCompra && (
+          <div className="alert info">
+            <div className="grow">
+              Este producto no estaba registrado. Al guardarlo se agrega a la compra; el stock entra cuando guardes la compra.
+            </div>
+          </div>
+        )}
         <div className="grid-3">
           <Campo label="Código de barras" ayuda="Déjalo vacío si no tiene">
-            <input className="mono" value={f.codigoBarra} onChange={(e) => set('codigoBarra', e.target.value)} autoFocus={!producto} />
+            <input className="mono" value={f.codigoBarra} onChange={(e) => set('codigoBarra', e.target.value)} autoFocus={!producto && !f.codigoBarra} />
           </Campo>
           <Campo label="Nombre" className="span-2">
-            <input value={f.nombre} onChange={(e) => set('nombre', e.target.value)} />
+            <input value={f.nombre} onChange={(e) => set('nombre', e.target.value)} autoFocus={!producto && !!f.codigoBarra} />
           </Campo>
           <Campo label="Categoría">
             <div className="row" style={{ flexWrap: 'nowrap', gap: 6 }}>
@@ -299,7 +316,7 @@ export default function ProductoForm({ producto, onClose, onGuardado }: { produc
         </div>
 
         <div className="grid-4">
-          {!producto && (
+          {!producto && !desdeCompra && (
             <Campo label="Stock inicial">
               <input className="num" type="number" step="any" min="0" value={f.stockInicial} onChange={(e) => set('stockInicial', e.target.value)} />
             </Campo>

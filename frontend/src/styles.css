@@ -321,3 +321,5 @@ td.actions { text-align: right; white-space: nowrap; }
 .texto-danger { color: var(--danger); }
 .texto-warn { color: var(--warn); }
 @media (max-width: 900px) { .inv-cabecera { grid-template-columns: 1fr; } .inv-cifras { grid-template-columns: repeat(2, 1fr); } }
+.sugerencia-nueva { border-top: 1px solid var(--border); color: var(--accent); font-weight: 600; }
+.sugerencia-nueva .muted { font-weight: 400; }

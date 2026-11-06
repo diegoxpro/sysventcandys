@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { BORRADOR_COMPRA, borrarBorrador, guardarBorrador, leerBorrador } from '../borrador';
 import BuscadorProducto from '../components/BuscadorProducto';
+import ProductoForm from '../components/ProductoForm';
 import ProveedorForm from '../components/ProveedorForm';
 import SugerenciasModal from '../components/SugerenciasModal';
 import { Campo, Kbd, useAtajos, useCarga, useToast, Vacio } from '../components/ui';
@@ -56,6 +57,8 @@ export default function NuevaCompra() {
   const buscador = useRef<HTMLInputElement>(null);
   const { data: proveedores, setData: setProveedores } = useCarga(() => api<Proveedor[]>('/proveedores'), []);
   const [nuevoProveedor, setNuevoProveedor] = useState(false);
+  // Lo escaneado o escrito que no existe: se abre el registro del producto con eso ya puesto.
+  const [nuevoProducto, setNuevoProducto] = useState<string | null>(null);
   // La compra en curso se recupera al volver al módulo, recargar o reabrir el navegador.
   const [inicial] = useState(() => (hayBorradorCompra() ? leerBorrador<Borrador>(BORRADOR_COMPRA) : null));
   const [cab, setCab] = useState<Cabecera>(() => ({ ...cabeceraVacia(), ...inicial?.cab }));
@@ -206,9 +209,9 @@ export default function NuevaCompra() {
       <div className="card">
         <div className="card-head">
           <div className="grow" style={{ maxWidth: 520 }}>
-            <BuscadorProducto ref={buscador} onElegir={agregar} conPresentaciones />
+            <BuscadorProducto ref={buscador} onElegir={agregar} conPresentaciones onNuevo={setNuevoProducto} />
           </div>
-          <span className="small muted">Enter agrega el producto. Repetir el código suma 1.</span>
+          <span className="small muted">Enter agrega el producto. Repetir el código suma 1. Si no existe, puedes registrarlo aquí.</span>
         </div>
         <div className="table-wrap">
           <table>
@@ -295,6 +298,22 @@ export default function NuevaCompra() {
             setProveedores((l) => [...(l ?? []), p].sort((a, b) => a.razonSocial.localeCompare(b.razonSocial)));
             setC('proveedorId', String(p.id));
             setNuevoProveedor(false);
+          }}
+        />
+      )}
+      {nuevoProducto !== null && (
+        <ProductoForm
+          desdeCompra
+          // Lo que parece código (sin espacios y con 4+ dígitos seguidos) va al código de barras; lo demás es el nombre.
+          inicial={/^[A-Za-z0-9-]*\d{4,}[A-Za-z0-9-]*$/.test(nuevoProducto) ? { codigoBarra: nuevoProducto } : { nombre: nuevoProducto }}
+          onClose={() => {
+            setNuevoProducto(null);
+            setTimeout(() => buscador.current?.focus());
+          }}
+          onGuardado={(p) => {
+            agregar(p);
+            setNuevoProducto(null);
+            setTimeout(() => buscador.current?.focus());
           }}
         />
       )}
