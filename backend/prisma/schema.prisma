@@ -258,6 +258,9 @@ model Proveedor {
   email           String?
   direccion       String?
   contacto        String?
+  /// Días de crédito que suele dar (ej. Backus 15): la compra propone Crédito y la fecha de pago.
+  diasCredito     Int?
+  notas           String?
   activo          Boolean  @default(true)
   createdAt       DateTime @default(now())
 
