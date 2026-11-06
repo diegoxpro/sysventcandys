@@ -25,21 +25,46 @@ export const puertos = {
   http: Number(process.env.RED_HTTP_PORT ?? 3080),
 };
 
-/** IPv4 de la PC en la red local. RED_IP fija la que va en el QR. */
-export function ipsLocales(): string[] {
+// La que se elige en Configuración › Red local (se guarda en la base).
+// 'auto' = detectarla siempre, aunque el .env tenga RED_IP.
+let ipConfigurada: string | null = null;
+
+export function fijarIpConfigurada(ip: string | null) {
+  ipConfigurada = ip?.trim() || null;
+}
+
+/** RED_IP del .env, salvo que en Configuración se haya elegido otra cosa. */
+function ipFija(): string | null {
+  if (ipConfigurada === 'auto') return null;
+  return ipConfigurada ?? (process.env.RED_IP?.trim() || null);
+}
+
+const esPrivada = (ip: string) => /^(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(ip);
+
+/** IPv4 que tiene ahora la PC, leídas de sus tarjetas de red. */
+export function ipsDetectadas(): string[] {
   const ips = Object.values(networkInterfaces())
     .flat()
     .filter((i) => i && i.family === 'IPv4' && !i.internal)
     .map((i) => i!.address);
-  const fija = process.env.RED_IP?.trim();
-  return [...new Set([...(fija ? [fija] : []), ...ips])];
+  // Primero las de red local (WiFi/LAN de la tienda).
+  return [...new Set([...ips.filter(esPrivada), ...ips.filter((ip) => !esPrivada(ip))])];
 }
 
+/** IPs que cubre el certificado: las detectadas y la elegida o fijada por RED_IP. */
+export function ipsLocales(): string[] {
+  const fija = ipFija();
+  return [...new Set([...(fija ? [fija] : []), ...ipsDetectadas()])];
+}
+
+/** La IP que va en el QR: la de Configuración, si no RED_IP, si no la detectada. */
 export function ipPrincipal(): string {
-  const fija = process.env.RED_IP?.trim();
-  if (fija) return fija;
-  const ips = ipsLocales();
-  return ips.find((ip) => /^(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(ip)) ?? ips[0] ?? '127.0.0.1';
+  return ipFija() ?? ipsDetectadas()[0] ?? '127.0.0.1';
+}
+
+export function origenIp(): 'configuracion' | 'env' | 'auto' {
+  if (ipConfigurada === 'auto') return 'auto';
+  return ipConfigurada ? 'configuracion' : process.env.RED_IP?.trim() ? 'env' : 'auto';
 }
 
 export interface Certificados {

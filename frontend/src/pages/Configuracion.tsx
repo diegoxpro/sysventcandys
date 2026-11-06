@@ -22,6 +22,7 @@ export default function Configuracion() {
           <button className={tab === 'usuarios' ? 'active' : ''} onClick={() => setTab('usuarios')}>Usuarios</button>
           <button className={tab === 'sunat' ? 'active' : ''} onClick={() => setTab('sunat')}>SUNAT</button>
           <button className={tab === 'backup' ? 'active' : ''} onClick={() => setTab('backup')}>Backup</button>
+          <button className={tab === 'red' ? 'active' : ''} onClick={() => setTab('red')}>Red local</button>
           <button className={tab === 'cuenta' ? 'active' : ''} onClick={() => setTab('cuenta')}>Mi contraseña</button>
         </div>
       )}
@@ -32,6 +33,7 @@ export default function Configuracion() {
       {tab === 'usuarios' && <Usuarios />}
       {tab === 'sunat' && <Sunat />}
       {tab === 'backup' && <Backups />}
+      {tab === 'red' && <RedLocal />}
       {tab === 'cuenta' && <MiCuenta />}
     </div>
   );
@@ -693,6 +695,120 @@ function MiCuenta() {
       <Campo label="Nueva contraseña" ayuda="Mínimo 6 caracteres"><input type="password" value={nueva} onChange={(e) => setNueva(e.target.value)} autoComplete="new-password" /></Campo>
       <Campo label="Repite la nueva"><input type="password" value={repetir} onChange={(e) => setRepetir(e.target.value)} autoComplete="new-password" /></Campo>
       <div><button className="btn btn-primary" onClick={cambiar} disabled={!actual || nueva.length < 6 || nueva !== repetir}>Cambiar</button></div>
+    </div>
+  );
+}
+
+interface InfoRed {
+  ip: string;
+  origen: 'configuracion' | 'env' | 'auto';
+  detectadas: string[];
+  envIp: string | null;
+  activo: boolean;
+  certificadoVence: string | null;
+  https: string;
+  entrada: string;
+}
+
+const ORIGEN_IP: Record<InfoRed['origen'], string> = {
+  configuracion: 'Elegida aquí',
+  env: 'Fijada en el archivo .env (RED_IP)',
+  auto: 'Detectada automáticamente',
+};
+
+/** IP de la PC en el WiFi: la usan los celulares del inventario (QR y certificado HTTPS). */
+function RedLocal() {
+  const avisar = useToast();
+  const { data, setData } = useCarga(() => api<InfoRed>('/red/info'), []);
+  const [manual, setManual] = useState('');
+  const [guardando, setGuardando] = useState(false);
+  if (!data) return null;
+
+  const fijar = async (ip: string | null) => {
+    setGuardando(true);
+    try {
+      const r = await api<InfoRed>('/red/ip', { method: 'PUT', body: { ip } });
+      setData(r);
+      setManual('');
+      avisar(ip ? `Listo: los celulares usarán ${r.ip}` : `Listo: el sistema detecta la IP solo (ahora ${r.ip})`);
+    } catch (e) {
+      avisar((e as Error).message, true);
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const perdida = data.origen !== 'auto' && !data.detectadas.includes(data.ip);
+  return (
+    <div className="stack" style={{ maxWidth: 820 }}>
+      {!data.activo && <div className="alert warn">El acceso de los celulares está desactivado (HTTPS_PORT=0 en el archivo .env).</div>}
+      {perdida && (
+        <div className="alert danger"><div>
+          La PC ya no tiene la IP <b className="mono">{data.ip}</b>
+          {data.detectadas.length ? <>. Ahora tiene <b className="mono">{data.detectadas.join(', ')}</b>. Elige la nueva abajo para que los celulares puedan conectarse.</> : '. No se detecta ninguna red: revisa que la PC esté conectada al WiFi.'}
+        </div></div>
+      )}
+      <div className="card card-pad stack">
+        <div>
+          <h2>IP de esta PC para los celulares</h2>
+          <p className="muted small" style={{ margin: '4px 0 0' }}>
+            Los celulares del inventario entran por esta dirección (va en el código QR). Si el router le cambia la IP a la PC, elige aquí la nueva:
+            el certificado de seguridad se rehace solo y los celulares <b>no</b> tienen que volver a instalar nada.
+          </p>
+        </div>
+        <div className="row">
+          <span className="mono" style={{ fontSize: 22, fontWeight: 700 }}>{data.ip}</span>
+          <span className={`badge ${perdida ? 'danger' : 'ok'}`}>{ORIGEN_IP[data.origen]}</span>
+        </div>
+        <div>
+          <b>IP que tiene ahora la PC</b>
+          {data.detectadas.length ? (
+            <table style={{ marginTop: 8 }}>
+              <tbody>
+                {data.detectadas.map((ip) => (
+                  <tr key={ip}>
+                    <td className="mono">{ip}</td>
+                    <td className="actions">
+                      {ip === data.ip ? (
+                        <span className="badge ok">En uso</span>
+                      ) : (
+                        <button className="btn btn-sm btn-primary" disabled={guardando} onClick={() => fijar(ip)}>Usar esta</button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p className="muted">No se detectó ninguna red. Conecta la PC al WiFi o al cable de la tienda.</p>
+          )}
+        </div>
+        <div className="grid-2">
+          <Campo label="Escribir otra IP" ayuda="Por ejemplo 192.168.1.51. La ves en Windows con el comando ipconfig.">
+            <input className="mono" value={manual} onChange={(e) => setManual(e.target.value)} placeholder="192.168.1.51" inputMode="decimal" />
+          </Campo>
+        </div>
+        <div className="row">
+          <button className="btn btn-primary" disabled={guardando || !manual.trim()} onClick={() => fijar(manual.trim())}>Guardar IP</button>
+          <button className="btn" disabled={guardando || data.origen === 'auto'} onClick={() => fijar(null)} title="Toma sola la IP del WiFi cada vez que cambie">
+            Detectar automáticamente
+          </button>
+        </div>
+        {data.origen === 'env' && (
+          <p className="small muted" style={{ margin: 0 }}>Lo que elijas aquí manda sobre el RED_IP del archivo .env ({data.envIp}).</p>
+        )}
+      </div>
+      <div className="card card-pad stack">
+        <h2>Datos de la conexión</h2>
+        <div className="small">
+          <div>Página del QR: <span className="mono">{data.entrada}</span></div>
+          <div>Sistema para celulares: <span className="mono">{data.https}</span></div>
+          {data.certificadoVence && <div>Certificado válido hasta {fecha(data.certificadoVence)} (se renueva solo).</div>}
+        </div>
+        <p className="small muted" style={{ margin: 0 }}>
+          Si hay un inventario en curso, vuelve a abrir Realizar inventario para ver el QR con la nueva IP. En el router puedes reservar la IP de la PC para que no cambie.
+        </p>
+      </div>
     </div>
   );
 }

@@ -82,7 +82,7 @@ La cámara del navegador solo funciona con conexión segura, así que el backend
 - `https://<IP de la PC>:3443`: la misma app y API, con un certificado firmado por una autoridad (CA) propia de la PC. Se crea sola en `backend/certificados-red/` y el certificado de la IP se renueva solo (al arrancar y cada 6 horas revisa si vence en menos de 60 días o si cambió la IP). La CA dura 20 años: los celulares no tienen que volver a instalar nada.
 - `http://<IP de la PC>:3080`: solo la página que abre el QR. Si el celular ya confía en la CA pasa directo a HTTPS; si no, muestra cómo instalar el certificado (Android e iPhone) una sola vez.
 
-Variables opcionales en `.env`: `RED_IP` (la IP que va en el QR, por ejemplo `192.168.18.90`), `HTTPS_PORT` (0 lo desactiva), `RED_HTTP_PORT` y `CERT_RED_DIR`. En el firewall de Windows hay que permitir los puertos 3443 y 3080 en la red privada.
+Si el router le cambia la IP a la PC, en **Configuración › Red local** se ve la IP que tiene ahora y se elige con un clic (o "Detectar automáticamente"); el certificado se rehace al momento y los celulares no reinstalan nada. Variables opcionales en `.env`: `RED_IP` (la IP que va en el QR, por ejemplo `192.168.18.90`), `HTTPS_PORT` (0 lo desactiva), `RED_HTTP_PORT` y `CERT_RED_DIR`. En el firewall de Windows hay que permitir los puertos 3443 y 3080 en la red privada.
 
 ## Backup en Google Drive
 

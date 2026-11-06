@@ -11,28 +11,43 @@ type Manejador = (req: IncomingMessage, res: ServerResponse) => void;
  *   primera vez y pasar a HTTPS. Todo lo demás redirige a HTTPS.
  * HTTPS_PORT=0 lo desactiva.
  */
+let https: Server | null = null;
+let venceCertificado: Date | null = null;
+
+/** Rehace el certificado si hace falta (IP nueva o por vencer) y lo carga sin reiniciar. */
+export function renovarCertificado() {
+  if (!https) return null;
+  const cert = asegurarCertificados(ipsLocales());
+  https.setSecureContext({ key: cert.key, cert: cert.cert });
+  venceCertificado = cert.vence;
+  return cert.vence;
+}
+
+export function estadoRed() {
+  return { activo: !!https, vence: venceCertificado };
+}
+
 export function abrirRedLocal(app: Manejador) {
   if (!puertos.https) return;
-  let https: Server;
   try {
     const cert = asegurarCertificados();
+    venceCertificado = cert.vence;
     https = crearHttps({ key: cert.key, cert: cert.cert }, app).listen(puertos.https, '0.0.0.0');
     console.log(`Celulares: https://${ipPrincipal()}:${puertos.https} (certificado hasta ${cert.vence.toISOString().slice(0, 10)})`);
   } catch (e) {
     console.error('No se pudo abrir HTTPS para los celulares:', e);
     return;
   }
-  https.on('error', (e) => console.error('HTTPS para celulares:', e.message));
+  https!.on('error', (e) => console.error('HTTPS para celulares:', e.message));
 
   // Renueva el certificado de la IP sin reiniciar (cambio de IP o por vencer).
   setInterval(() => {
     try {
-      const cert = asegurarCertificados(ipsLocales());
-      https.setSecureContext({ key: cert.key, cert: cert.cert });
+      renovarCertificado();
     } catch (e) {
       console.error('No se pudo renovar el certificado de red:', e);
     }
-  }, 6 * 3_600_000).unref();
+  }, 30 * 60_000).unref();
 
   if (puertos.http) {
     crearHttp(paginaEntrada)
