@@ -4,6 +4,8 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { AppModule } from './app.module';
+import { ConfiguracionService } from './configuracion/configuracion.service';
+import { fijarIpConfigurada } from './red/certificados';
 import { abrirRedLocal } from './red/servidor-red';
 
 async function bootstrap() {
@@ -20,6 +22,8 @@ async function bootstrap() {
   else await app.listen(port);
   console.log(`API lista en http://localhost:${port}/api`);
   // Celulares de la red local (inventario): HTTPS con la CA propia de la PC.
+  // La IP elegida en Configuración › Red local manda sobre RED_IP y la detectada.
+  fijarIpConfigurada((await app.get(ConfiguracionService).obtener()).redIp);
   abrirRedLocal(app.getHttpAdapter().getInstance());
 }
 

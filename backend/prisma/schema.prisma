@@ -115,6 +115,8 @@ model Configuracion {
   sunatModo             ModoSunat @default(DESACTIVADO)
   // Token del servicio de consulta DNI/RUC (Decolecta). Nunca se devuelve al navegador.
   consultaDocToken      String?
+  // IP de esta PC en el WiFi para los celulares (QR del inventario). 'auto' = detectarla sola; vacío = RED_IP del .env o detectarla.
+  redIp                 String?
   updatedAt             DateTime  @updatedAt
 }
 
