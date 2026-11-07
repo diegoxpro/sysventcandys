@@ -1,7 +1,6 @@
 import { Body, Controller, Get, Post } from '@nestjs/common';
-import { Rol } from '@prisma/client';
 import { IsString, MinLength } from 'class-validator';
-import { Roles } from '../auth/decorators';
+import { Permiso } from '../auth/decorators';
 import { PrismaService } from '../prisma/prisma.service';
 
 class NombreDto {
@@ -18,7 +17,7 @@ export class CatalogosController {
     return this.prisma.categoria.findMany({ orderBy: { nombre: 'asc' } });
   }
 
-  @Roles(Rol.ADMIN)
+  @Permiso('productos.editar')
   @Post('categorias')
   crearCategoria(@Body() { nombre }: NombreDto) {
     const n = nombre.trim().toUpperCase();
@@ -30,7 +29,7 @@ export class CatalogosController {
     return this.prisma.marca.findMany({ orderBy: { nombre: 'asc' } });
   }
 
-  @Roles(Rol.ADMIN)
+  @Permiso('productos.editar')
   @Post('marcas')
   crearMarca(@Body() { nombre }: NombreDto) {
     const n = nombre.trim().toUpperCase();

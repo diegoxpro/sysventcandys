@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Patch } from '@nestjs/common';
-import { ModoSunat, Rol } from '@prisma/client';
+import { ModoSunat } from '@prisma/client';
 import { IsBoolean, IsEnum, IsInt, IsNumber, IsOptional, IsString, Matches, Max, Min } from 'class-validator';
-import { Roles } from '../auth/decorators';
+import { Permiso } from '../auth/decorators';
 import { ConfiguracionService } from './configuracion.service';
 
 class ActualizarConfiguracionDto {
@@ -45,7 +45,7 @@ export class ConfiguracionController {
     return publica(await this.config.obtener());
   }
 
-  @Roles(Rol.ADMIN)
+  @Permiso('config.preferencias')
   @Patch()
   async actualizar(@Body() dto: ActualizarConfiguracionDto) {
     if (dto.consultaDocToken !== undefined) dto.consultaDocToken = (dto.consultaDocToken.trim() || null) as string;

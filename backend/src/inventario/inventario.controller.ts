@@ -1,7 +1,7 @@
 import { BadRequestException, Body, Controller, Get, Post, Query } from '@nestjs/common';
-import { Prisma, Rol, TipoMovimiento } from '@prisma/client';
+import { Prisma, TipoMovimiento } from '@prisma/client';
 import { IsInt, IsNumber, IsOptional, IsPositive, IsString, Min, MinLength } from 'class-validator';
-import { Roles, UsuarioActual, UsuarioSesion } from '../auth/decorators';
+import { Permiso, UsuarioActual, UsuarioSesion } from '../auth/decorators';
 import { hoy, sumarDias } from '../common/fechas';
 import { ConfiguracionService } from '../configuracion/configuracion.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -53,7 +53,7 @@ export class InventarioController {
     return { diasAviso: cfg.diasAvisoVencimiento, stockBajo, vencidos, porVencer };
   }
 
-  @Roles(Rol.ADMIN)
+  @Permiso('stock.ajustar')
   @Post('mermas')
   async merma(@Body() dto: MermaDto, @UsuarioActual() user: UsuarioSesion) {
     const p = await this.prisma.producto.findUniqueOrThrow({ where: { id: dto.productoId } });
@@ -87,7 +87,7 @@ export class InventarioController {
   }
 
   /** Corrige el stock al conteo físico. */
-  @Roles(Rol.ADMIN)
+  @Permiso('stock.ajustar')
   @Post('ajustes')
   async ajuste(@Body() dto: AjusteDto, @UsuarioActual() user: UsuarioSesion) {
     const p = await this.prisma.producto.findUniqueOrThrow({ where: { id: dto.productoId } });

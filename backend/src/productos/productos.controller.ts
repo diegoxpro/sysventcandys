@@ -1,6 +1,5 @@
 import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query } from '@nestjs/common';
-import { Rol } from '@prisma/client';
-import { Roles, UsuarioActual, UsuarioSesion } from '../auth/decorators';
+import { Permiso, UsuarioActual, UsuarioSesion } from '../auth/decorators';
 import { ActualizarPreciosDto, CrearProductoDto, EditarProductoDto } from './productos.dto';
 import { FiltroProductos, ProductosService } from './productos.service';
 
@@ -33,19 +32,19 @@ export class ProductosController {
     return this.productos.obtener(id);
   }
 
-  @Roles(Rol.ADMIN)
+  @Permiso('productos.editar')
   @Post()
   crear(@Body() dto: CrearProductoDto, @UsuarioActual() user: UsuarioSesion) {
     return this.productos.crear(dto, user.id);
   }
 
-  @Roles(Rol.ADMIN)
+  @Permiso('productos.editar')
   @Patch('precios')
   actualizarPrecios(@Body() dto: ActualizarPreciosDto) {
     return this.productos.actualizarPrecios(dto);
   }
 
-  @Roles(Rol.ADMIN)
+  @Permiso('productos.editar')
   @Patch(':id')
   editar(@Param('id', ParseIntPipe) id: number, @Body() dto: EditarProductoDto) {
     return this.productos.editar(id, dto);

@@ -1,8 +1,7 @@
 import { Body, Controller, Get, Headers, Param, ParseIntPipe, Patch, Post, Query } from '@nestjs/common';
-import { Rol } from '@prisma/client';
 import { Type } from 'class-transformer';
 import { ArrayMaxSize, ArrayNotEmpty, IsArray, IsIn, IsInt, IsNumber, IsOptional, IsString, Matches, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
-import { Publico, Roles, UsuarioActual, UsuarioSesion } from '../auth/decorators';
+import { Publico, Permiso, UsuarioActual, UsuarioSesion } from '../auth/decorators';
 import { urlEntrada } from '../red/servidor-red';
 import { AccionConteo, TomaInventarioService } from './toma-inventario.service';
 
@@ -40,7 +39,7 @@ class ConteoDto {
 }
 
 /** Pantalla "Realizar inventario" de la PC (solo administrador). */
-@Roles(Rol.ADMIN)
+@Permiso('inventario.validar')
 @Controller('toma-inventario')
 export class TomaInventarioController {
   constructor(private readonly svc: TomaInventarioService) {}

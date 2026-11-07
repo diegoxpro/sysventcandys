@@ -1,8 +1,8 @@
 import { BadRequestException, Body, Controller, Delete, Get, NotFoundException, Param, ParseEnumPipe, Put, Res } from '@nestjs/common';
-import { Rol, TipoImagen } from '@prisma/client';
+import { TipoImagen } from '@prisma/client';
 import { IsBase64 } from 'class-validator';
 import { Response } from 'express';
-import { Publico, Roles } from '../auth/decorators';
+import { Publico, Permiso } from '../auth/decorators';
 import { PrismaService } from '../prisma/prisma.service';
 
 class SubirImagenDto {
@@ -49,7 +49,7 @@ export class ImagenesController {
     res.send(Buffer.from(img.datos));
   }
 
-  @Roles(Rol.ADMIN)
+  @Permiso('config.preferencias')
   @Put(':tipo')
   async subir(@Param('tipo', new ParseEnumPipe(TipoImagen)) tipo: TipoImagen, @Body() dto: SubirImagenDto) {
     const datos = Buffer.from(dto.archivo, 'base64');
@@ -60,7 +60,7 @@ export class ImagenesController {
     return this.marca();
   }
 
-  @Roles(Rol.ADMIN)
+  @Permiso('config.preferencias')
   @Delete(':tipo')
   async quitar(@Param('tipo', new ParseEnumPipe(TipoImagen)) tipo: TipoImagen) {
     await this.prisma.imagenTienda.deleteMany({ where: { tipo } });

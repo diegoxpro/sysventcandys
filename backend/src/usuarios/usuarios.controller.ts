@@ -2,7 +2,7 @@ import { BadRequestException, Body, Controller, Get, Param, ParseIntPipe, Patch,
 import { Rol } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { IsBoolean, IsEnum, IsOptional, IsString, Matches, MinLength } from 'class-validator';
-import { Roles, UsuarioActual, UsuarioSesion } from '../auth/decorators';
+import { Permiso, UsuarioActual, UsuarioSesion } from '../auth/decorators';
 import { PrismaService } from '../prisma/prisma.service';
 
 class CrearUsuarioDto {
@@ -22,7 +22,7 @@ class EditarUsuarioDto {
 
 const campos = { id: true, usuario: true, nombre: true, rol: true, activo: true, createdAt: true };
 
-@Roles(Rol.ADMIN)
+@Permiso('config.usuarios')
 @Controller('usuarios')
 export class UsuariosController {
   constructor(private readonly prisma: PrismaService) {}

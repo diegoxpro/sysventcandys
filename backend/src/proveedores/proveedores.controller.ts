@@ -1,7 +1,7 @@
 import { BadRequestException, Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query } from '@nestjs/common';
-import { Prisma, Rol } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { IsBoolean, IsEmail, IsInt, IsOptional, IsString, Matches, Max, Min, MinLength, ValidateIf } from 'class-validator';
-import { Roles } from '../auth/decorators';
+import { Permiso } from '../auth/decorators';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConsultaDocService } from '../ventas/consulta-doc.service';
 
@@ -75,7 +75,7 @@ export class ProveedoresController {
     return this.prisma.proveedor.findUniqueOrThrow({ where: { id } });
   }
 
-  @Roles(Rol.ADMIN)
+  @Permiso('proveedores.editar')
   @Post()
   async crear(@Body() dto: ProveedorDto) {
     const data = this.datos(dto);
@@ -83,7 +83,7 @@ export class ProveedoresController {
     return this.prisma.proveedor.create({ data: { ...data, razonSocial: data.razonSocial! } });
   }
 
-  @Roles(Rol.ADMIN)
+  @Permiso('proveedores.editar')
   @Patch(':id')
   async editar(@Param('id', ParseIntPipe) id: number, @Body() dto: EditarProveedorDto) {
     const data = this.datos(dto);
@@ -92,7 +92,7 @@ export class ProveedoresController {
   }
 
   /** Sin compras se borra; con compras queda inactivo para conservar el historial y las cuentas por pagar. */
-  @Roles(Rol.ADMIN)
+  @Permiso('proveedores.editar')
   @Delete(':id')
   async eliminar(@Param('id', ParseIntPipe) id: number) {
     const compras = await this.prisma.compra.count({ where: { proveedorId: id } });

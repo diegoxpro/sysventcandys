@@ -1,7 +1,6 @@
 import { Body, Controller, Get, Header, Post, Query, StreamableFile } from '@nestjs/common';
-import { Rol } from '@prisma/client';
 import { IsBase64, IsIn, IsString, MaxLength } from 'class-validator';
-import { Roles, UsuarioActual, UsuarioSesion } from '../auth/decorators';
+import { Permiso, UsuarioActual, UsuarioSesion } from '../auth/decorators';
 import { ImportacionService, ModoStock } from './importacion.service';
 
 class ArchivoDto {
@@ -11,7 +10,7 @@ class ArchivoDto {
   @IsIn(['reemplazar', 'sumar']) modoStock: ModoStock;
 }
 
-@Roles(Rol.ADMIN)
+@Permiso('productos.importar')
 @Controller('importacion')
 export class ImportacionController {
   constructor(private readonly importacion: ImportacionService) {}
