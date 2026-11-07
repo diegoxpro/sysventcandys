@@ -667,7 +667,10 @@ model InventarioItem {
   cantidad         Decimal   @db.Decimal(12, 3)
   // Stock del sistema cuando se contó (el del conteo que define la cantidad).
   stockReferencia  Decimal   @db.Decimal(12, 3)
-  fechaVencimiento DateTime? @db.Date
+  // Cuándo se tomó ese conteo: los lotes creados después (compras) no se tocan al validar.
+  contadoEn        DateTime  @default(now())
+  // Detalle por fecha de vencimiento: [{ "fecha": "2026-12-15", "cantidad": 10 }]. Suma = cantidad.
+  lotes            Json      @default("[]")
   actualizado      DateTime  @default(now())
 
   inventario Inventario         @relation(fields: [inventarioId], references: [id])
@@ -685,7 +688,8 @@ model InventarioConteo {
   operadorId       Int
   cantidad         Decimal      @db.Decimal(12, 3)
   stockAlContar    Decimal      @db.Decimal(12, 3)
-  fechaVencimiento DateTime?    @db.Date
+  // Mismo formato que InventarioItem.lotes.
+  lotes            Json         @default("[]")
   estado           EstadoConteo @default(APLICADO)
   // Id generado en el celular: si reenvía por mala señal no se duplica.
   clienteId        String       @unique

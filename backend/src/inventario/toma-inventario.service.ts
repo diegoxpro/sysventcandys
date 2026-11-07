@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException, 
 import { EstadoConteo, EstadoInventario, Prisma, TipoMovimiento } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { exigirLotes, juntarLotes, LoteContado, leerLotes, lotesJson, normalizarLotes, sumaLotes } from './lotes-inventario';
 import { StockService } from './stock.service';
 
 export type AccionConteo = 'SUMAR' | 'REEMPLAZAR' | 'DESCARTAR';
@@ -10,13 +11,12 @@ export interface ConteoMovil {
   clienteId: string;
   productoId: number;
   cantidad: number;
-  fechaVencimiento?: string;
+  lotes?: LoteContado[];
 }
 
 const ACTIVOS = [EstadoInventario.EN_CURSO, EstadoInventario.REVISION];
 const productoBasico = { select: { id: true, nombre: true, codigoBarra: true, unidad: true, stock: true, costo: true, controlaVencimiento: true } };
 const token = () => randomBytes(24).toString('base64url');
-const aFecha = (v?: string | null) => (v ? new Date(`${v.slice(0, 10)}T00:00:00Z`) : null);
 
 /**
  * Inventario físico con celulares: el administrador lo inicia en la PC, los
@@ -91,14 +91,18 @@ export class TomaInventarioService {
       if (accion === 'DESCARTAR') {
         return tx.inventarioConteo.update({ where: { id: c.id }, data: { estado: EstadoConteo.DESCARTADO } });
       }
-      const cantidad = accion === 'SUMAR' ? c.item.cantidad.plus(c.cantidad) : c.cantidad;
+      const sumar = accion === 'SUMAR';
+      const cantidad = sumar ? c.item.cantidad.plus(c.cantidad) : c.cantidad;
+      // Sumar junta los lotes de los dos conteos (misma fecha se suma).
+      const lotes = sumar ? juntarLotes(leerLotes(c.item.lotes), leerLotes(c.lotes)) : leerLotes(c.lotes);
       await tx.inventarioItem.update({
         where: { id: c.itemId },
         data: {
           cantidad,
+          lotes: lotesJson(lotes),
           // Las ventas hechas antes de este conteo ya están reflejadas en él.
           stockReferencia: c.stockAlContar,
-          fechaVencimiento: c.fechaVencimiento ?? c.item.fechaVencimiento,
+          contadoEn: c.fecha,
           actualizado: new Date(),
         },
       });
@@ -110,15 +114,21 @@ export class TomaInventarioService {
   }
 
   /** Corrección manual desde la PC al revisar. */
-  async editarItem(itemId: number, cantidad: number, fechaVencimiento?: string | null) {
-    const item = await this.prisma.inventarioItem.findUnique({ where: { id: itemId }, include: { inventario: true } });
+  async editarItem(itemId: number, cantidad: number, lotesDto?: LoteContado[]) {
+    const item = await this.prisma.inventarioItem.findUnique({
+      where: { id: itemId },
+      include: { inventario: true, producto: { select: { controlaVencimiento: true } } },
+    });
     if (!item) throw new NotFoundException('Producto no encontrado en el inventario');
     this.exigirAbierto(item.inventario.estado);
+    const lotes = lotesDto ? normalizarLotes(lotesDto) : leerLotes(item.lotes);
+    const total = lotes.length ? sumaLotes(lotes) : cantidad;
+    exigirLotes(total, lotes, item.producto.controlaVencimiento);
     return this.prisma.inventarioItem.update({
       where: { id: itemId },
       data: {
-        cantidad,
-        ...(fechaVencimiento !== undefined ? { fechaVencimiento: aFecha(fechaVencimiento) } : {}),
+        cantidad: total,
+        lotes: lotesJson(lotes),
         actualizado: new Date(),
       },
     });
@@ -161,7 +171,7 @@ export class TomaInventarioService {
   /**
    * Aplica el inventario: a cada producto le suma (contado - stock al contar),
    * así lo vendido mientras se contaba no se pierde. Deja un movimiento
-   * INVENTARIO en el kardex y, si se anotó vencimiento, lo deja como lote.
+   * INVENTARIO en el kardex y deja los lotes (fecha y cantidad) que se contaron.
    */
   async validar(id: number, usuarioId: number) {
     const inv = await this.obtener(id);
@@ -169,7 +179,10 @@ export class TomaInventarioService {
     const pendientes = await this.prisma.inventarioConteo.count({ where: { inventarioId: id, estado: EstadoConteo.PENDIENTE } });
     if (pendientes) throw new BadRequestException(`Hay ${pendientes} producto(s) contados dos veces sin decidir si sumar o reemplazar`);
 
-    const items = await this.prisma.inventarioItem.findMany({ where: { inventarioId: id }, include: { producto: { select: { costo: true } } } });
+    const items = await this.prisma.inventarioItem.findMany({
+      where: { inventarioId: id },
+      include: { producto: { select: { costo: true, controlaVencimiento: true } } },
+    });
     let ajustados = 0;
     await this.prisma.$transaction(
       async (tx) => {
@@ -188,7 +201,8 @@ export class TomaInventarioService {
             });
             ajustados++;
           }
-          if (it.fechaVencimiento) await this.stock.fijarVencimiento(tx, it.productoId, it.fechaVencimiento, 'INVENTARIO');
+          const lotes = leerLotes(it.lotes);
+          if (lotes.length || it.producto.controlaVencimiento) await this.stock.reemplazarLotes(tx, it.productoId, lotes, it.contadoEn);
         }
         await tx.inventario.update({ where: { id }, data: { estado: EstadoInventario.VALIDADO, validadoAt: new Date() } });
       },
@@ -251,7 +265,7 @@ export class TomaInventarioService {
       }
     }
     if (!producto) throw new NotFoundException(`No hay ningún producto con el código ${cod}`);
-    return { producto, presentacion, yaContado: await this.yaContado(op.inventarioId, producto.id) };
+    return { producto, presentacion, lotesSistema: await this.lotesSistema(producto.id), yaContado: await this.yaContado(op.inventarioId, producto.id) };
   }
 
   async buscar(tokenOperador: string | undefined, q: string) {
@@ -276,7 +290,13 @@ export class TomaInventarioService {
     const op = await this.operador(tokenOperador);
     const producto = await this.prisma.producto.findUnique({ where: { id: productoId }, ...productoBasico });
     if (!producto) throw new NotFoundException('Producto no encontrado');
-    return { producto, presentacion: null, yaContado: await this.yaContado(op.inventarioId, producto.id) };
+    return { producto, presentacion: null, lotesSistema: await this.lotesSistema(producto.id), yaContado: await this.yaContado(op.inventarioId, producto.id) };
+  }
+
+  /** Lotes con stock que el sistema conoce, por fecha: el celular los muestra para corregirlos. */
+  private async lotesSistema(productoId: number) {
+    const lotes = await this.prisma.lote.findMany({ where: { productoId, cantidad: { gt: 0 } }, orderBy: { fechaVencimiento: 'asc' } });
+    return normalizarLotes(lotes.map((l) => ({ fecha: l.fechaVencimiento.toISOString().slice(0, 10), cantidad: Number(l.cantidad) })));
   }
 
   private async yaContado(inventarioId: number, productoId: number) {
@@ -287,7 +307,7 @@ export class TomaInventarioService {
     if (!item) return null;
     return {
       cantidad: item.cantidad,
-      conteos: item.conteos.map((c) => ({ operador: c.operador.nombre, cantidad: c.cantidad, estado: c.estado, fecha: c.fecha })),
+      conteos: item.conteos.map((c) => ({ operador: c.operador.nombre, cantidad: c.cantidad, lotes: leerLotes(c.lotes), estado: c.estado, fecha: c.fecha })),
     };
   }
 
@@ -306,9 +326,10 @@ export class TomaInventarioService {
     if (op.inventario.estado !== EstadoInventario.EN_CURSO) {
       throw new BadRequestException('El administrador ya cerró el conteo. Este dato no se guardó.');
     }
-    const producto = await this.prisma.producto.findUnique({ where: { id: dto.productoId }, select: { id: true, stock: true } });
+    const producto = await this.prisma.producto.findUnique({ where: { id: dto.productoId }, select: { id: true, stock: true, controlaVencimiento: true } });
     if (!producto) throw new NotFoundException('Producto no encontrado');
-    const fechaVencimiento = aFecha(dto.fechaVencimiento);
+    const lotes = normalizarLotes(dto.lotes);
+    exigirLotes(dto.cantidad, lotes, producto.controlaVencimiento);
 
     const intentar = () =>
       this.prisma.$transaction(async (tx) => {
@@ -323,7 +344,7 @@ export class TomaInventarioService {
               productoId: producto.id,
               cantidad: dto.cantidad,
               stockReferencia: producto.stock,
-              fechaVencimiento,
+              lotes: lotesJson(lotes),
             },
           }));
         if (existente) await tx.inventarioItem.update({ where: { id: existente.id }, data: { actualizado: new Date() } });
@@ -334,7 +355,7 @@ export class TomaInventarioService {
             operadorId: op.id,
             cantidad: dto.cantidad,
             stockAlContar: producto.stock,
-            fechaVencimiento,
+            lotes: lotesJson(lotes),
             estado: existente ? EstadoConteo.PENDIENTE : EstadoConteo.APLICADO,
             clienteId: dto.clienteId,
           },

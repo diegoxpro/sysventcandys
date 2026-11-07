@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Headers, Param, ParseIntPipe, Patch, Post, Query } from '@nestjs/common';
 import { Rol } from '@prisma/client';
 import { Type } from 'class-transformer';
-import { ArrayMaxSize, ArrayNotEmpty, IsArray, IsIn, IsInt, IsNumber, IsOptional, IsString, Matches, MaxLength, Min, MinLength } from 'class-validator';
+import { ArrayMaxSize, ArrayNotEmpty, IsArray, IsIn, IsInt, IsNumber, IsOptional, IsString, Matches, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
 import { Publico, Roles, UsuarioActual, UsuarioSesion } from '../auth/decorators';
 import { urlEntrada } from '../red/servidor-red';
 import { AccionConteo, TomaInventarioService } from './toma-inventario.service';
@@ -12,9 +12,15 @@ class ResolverDto {
   @IsIn(['SUMAR', 'REEMPLAZAR', 'DESCARTAR']) accion: AccionConteo;
 }
 
+class LoteDto {
+  @Matches(FECHA) fecha: string;
+  @IsNumber() @Min(0) cantidad: number;
+}
+
 class EditarItemDto {
   @IsNumber() @Min(0) cantidad: number;
-  @IsOptional() @Matches(FECHA) fechaVencimiento?: string | null;
+  /** Detalle por fecha; la suma reemplaza a cantidad. Vacío = sin fechas. */
+  @IsOptional() @IsArray() @ArrayMaxSize(30) @ValidateNested({ each: true }) @Type(() => LoteDto) lotes?: LoteDto[];
 }
 
 class InhabilitarDto {
@@ -30,7 +36,7 @@ class ConteoDto {
   @IsString() @MinLength(8) @MaxLength(64) clienteId: string;
   @Type(() => Number) @IsInt() productoId: number;
   @IsNumber() @Min(0) cantidad: number;
-  @IsOptional() @Matches(FECHA) fechaVencimiento?: string;
+  @IsOptional() @IsArray() @ArrayMaxSize(30) @ValidateNested({ each: true }) @Type(() => LoteDto) lotes?: LoteDto[];
 }
 
 /** Pantalla "Realizar inventario" de la PC (solo administrador). */
@@ -98,7 +104,7 @@ export class TomaInventarioController {
 
   @Patch('items/:id')
   editar(@Param('id', ParseIntPipe) id: number, @Body() dto: EditarItemDto) {
-    return this.svc.editarItem(id, dto.cantidad, dto.fechaVencimiento);
+    return this.svc.editarItem(id, dto.cantidad, dto.lotes);
   }
 
   @Post('inhabilitar')
