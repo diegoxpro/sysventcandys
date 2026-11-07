@@ -38,7 +38,7 @@ export default function Inventario() {
 }
 
 function Movimientos() {
-  const { esAdmin } = useAuth();
+  const { puede } = useAuth();
   const [producto, setProducto] = useState<Producto | null>(null);
   const [tipo, setTipo] = useState('');
   const [ajuste, setAjuste] = useState(false);
@@ -70,7 +70,7 @@ function Movimientos() {
               {producto.nombre} · stock {qty(producto.stock)}
               <button className="close" style={{ fontSize: 14, padding: 0 }} onClick={() => setProducto(null)} aria-label="Quitar filtro">×</button>
             </span>
-            {esAdmin && (
+            {puede('stock.ajustar') && (
               <>
                 <button className="btn btn-sm" onClick={() => setAjuste(true)}>Ajustar stock</button>
                 <button className="btn btn-sm" onClick={() => setMerma({ productoId: producto.id, nombre: producto.nombre, costo: n(producto.costo) })}>Merma</button>

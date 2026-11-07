@@ -29,7 +29,7 @@ interface Props {
 
 export default function ProductoForm({ producto, inicial, desdeCompra, onClose, onGuardado }: Props) {
   const avisar = useToast();
-  const { esAdmin } = useAuth();
+  const { puede } = useAuth();
   const { data: cfg } = useCarga(() => api<Configuracion>('/configuracion'), []);
   const { data: categorias, setData: setCategorias } = useCarga(() => api<Catalogo[]>('/categorias'), []);
   const { data: marcas, setData: setMarcas } = useCarga(() => api<Catalogo[]>('/marcas'), []);
@@ -157,10 +157,10 @@ export default function ProductoForm({ producto, inicial, desdeCompra, onClose, 
   return (
     <Modal
       ancho
-      titulo={producto ? (esAdmin ? 'Editar producto' : 'Producto') : 'Nuevo producto'}
+      titulo={producto ? (puede('productos.editar') ? 'Editar producto' : 'Producto') : 'Nuevo producto'}
       onClose={onClose}
       pie={
-        esAdmin && (
+        puede('productos.editar') && (
           <>
             <button className="btn" onClick={onClose}>Cancelar</button>
             <button className="btn btn-primary" onClick={guardar} disabled={enviando || f.nombre.trim().length < 2 || n(f.precio1) <= 0 || presIncompleta}>
@@ -170,7 +170,7 @@ export default function ProductoForm({ producto, inicial, desdeCompra, onClose, 
         )
       }
     >
-      <fieldset disabled={!esAdmin} style={{ border: 0, padding: 0, margin: 0 }} className="stack">
+      <fieldset disabled={!puede('productos.editar')} style={{ border: 0, padding: 0, margin: 0 }} className="stack">
         {producto?.revisar && (
           <div className="alert warn">
             <div className="grow">

@@ -16,7 +16,7 @@ const FILTROS = [
 ];
 
 export default function Productos() {
-  const { esAdmin } = useAuth();
+  const { puede } = useAuth();
   const [params, setParams] = useSearchParams();
   const filtro = params.get('filtro') ?? '';
   const [texto, setTexto] = useState('');
@@ -26,7 +26,7 @@ export default function Productos() {
   const buscar = useRef<HTMLInputElement>(null);
   useAtajos({
     F2: () => buscar.current?.select(),
-    ...(esAdmin && { F8: () => setEditar('nuevo') }),
+    ...(puede('productos.editar') && { F8: () => setEditar('nuevo') }),
   });
 
   const { data, cargando, recargar } = useCarga(
@@ -42,7 +42,7 @@ export default function Productos() {
           <h1>Productos</h1>
           <p>{data ? `${data.total.toLocaleString('es-PE')} productos` : 'Cargando…'}</p>
         </div>
-        {esAdmin && (
+        {puede('productos.editar') && (
           <button className="btn btn-primary" onClick={() => setEditar('nuevo')}>
             Nuevo producto <Kbd>F8</Kbd>
           </button>

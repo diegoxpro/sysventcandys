@@ -21,11 +21,9 @@ import Ventas from './pages/Ventas';
 
 // Solo la cargan los celulares (trae el lector de códigos de barras).
 const MovilInventario = lazy(() => import('./pages/MovilInventario'));
-// La cajera solo cuenta (con el lector de la caja); el panel completo es del admin.
-const ContarInventarioPc = lazy(() => import('./pages/ContarInventarioPc'));
 
 export default function App() {
-  const { usuario, listo, esAdmin } = useAuth();
+  const { usuario, listo, puede } = useAuth();
   const { pathname } = useLocation();
   // Celular del inventario: entra con el QR, sin usuario del sistema.
   if (pathname.startsWith('/m/')) return <Suspense fallback={null}><MovilInventario /></Suspense>;
@@ -41,26 +39,20 @@ export default function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route index element={<Inicio />} />
-        <Route path="venta" element={<Venta />} />
+        {puede('ventas.vender') && <Route path="venta" element={<Venta />} />}
         <Route path="caja" element={<Caja />} />
-        <Route path="ventas" element={<Ventas />} />
+        {puede('ventas.ver') && <Route path="ventas" element={<Ventas />} />}
         <Route path="clientes" element={<Clientes />} />
-        {esAdmin && (
-          <>
-            <Route path="reportes" element={<Navigate to="/reportes/ventas" replace />} />
-            <Route path="reportes/ventas" element={<Reportes key="ventas" categoria="ventas" />} />
-            <Route path="reportes/compras" element={<Reportes key="compras" categoria="compras" />} />
-            <Route path="reportes/kardex" element={<Reportes key="kardex" categoria="kardex" />} />
-            <Route path="reportes/sunat" element={<Reportes key="sunat" categoria="sunat" />} />
-          </>
+        {(['ventas', 'compras', 'kardex', 'sunat'] as const).map(
+          (c) => puede(`reportes.${c}`) && <Route key={c} path={`reportes/${c}`} element={<Reportes key={c} categoria={c} />} />,
         )}
         <Route path="productos" element={<Productos />} />
         <Route path="inventario" element={<Inventario />} />
-        <Route path="inventario/realizar" element={esAdmin ? <RealizarInventario /> : <Suspense fallback={null}><ContarInventarioPc /></Suspense>} />
-        <Route path="compras" element={<Compras />} />
-        {esAdmin && <Route path="compras/nueva" element={<NuevaCompra />} />}
-        <Route path="compras/:id" element={<CompraDetalle />} />
-        <Route path="cuentas-por-pagar" element={<CuentasPorPagar />} />
+        {puede('inventario.realizar') && <Route path="inventario/realizar" element={<RealizarInventario />} />}
+        {puede('compras.ver') && <Route path="compras" element={<Compras />} />}
+        {puede('compras.registrar') && <Route path="compras/nueva" element={<NuevaCompra />} />}
+        {puede('compras.ver') && <Route path="compras/:id" element={<CompraDetalle />} />}
+        {puede('compras.ver') && <Route path="cuentas-por-pagar" element={<CuentasPorPagar />} />}
         <Route path="proveedores" element={<Proveedores />} />
         <Route path="configuracion" element={<Configuracion />} />
         <Route path="login" element={<Navigate to="/" replace />} />

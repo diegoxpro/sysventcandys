@@ -11,7 +11,7 @@ import { Compra, DOC_LABEL, MEDIO_LABEL, Sugerencia } from '../types';
 export default function CompraDetalle() {
   const { id } = useParams();
   const avisar = useToast();
-  const { esAdmin } = useAuth();
+  const { puede } = useAuth();
   const { data: c, recargar, error } = useCarga(() => api<Compra>(`/compras/${id}`), [id]);
   const [pagar, setPagar] = useState(false);
   const [sugerencias, setSugerencias] = useState<Sugerencia[] | null>(null);
@@ -48,7 +48,7 @@ export default function CompraDetalle() {
           </h1>
           <p>{c.proveedor.razonSocial}{c.proveedor.ruc && <> · RUC {c.proveedor.ruc}</>}</p>
         </div>
-        {esAdmin && !anulada && (
+        {puede('compras.registrar') && !anulada && (
           <div className="row">
             <button className="btn" onClick={revisarPrecios}>Revisar precios</button>
             {n(c.saldo) > 0 && <button className="btn btn-primary" onClick={() => setPagar(true)}>Registrar pago</button>}

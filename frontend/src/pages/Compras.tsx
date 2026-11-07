@@ -13,7 +13,7 @@ function primerDiaMes() {
 }
 
 export default function Compras() {
-  const { esAdmin } = useAuth();
+  const { puede } = useAuth();
   const navegar = useNavigate();
   const [desde, setDesde] = useState(primerDiaMes());
   const [hasta, setHasta] = useState('');
@@ -31,7 +31,7 @@ export default function Compras() {
           <h1>Compras</h1>
           <p>Cada compra suma stock y actualiza el costo de los productos.</p>
         </div>
-        {esAdmin && (
+        {puede('compras.registrar') && (
           <Link className="btn btn-primary" to="/compras/nueva">
             {hayBorradorCompra() ? 'Continuar compra en borrador' : 'Registrar compra'}
           </Link>

@@ -110,7 +110,7 @@ function EstadoSunatBadge({ v }: { v: Venta }) {
 function DetalleVenta({ id, cfg, onClose, onCambio }: { id: number; cfg: Configuracion; onClose: () => void; onCambio: () => void }) {
   const avisar = useToast();
   const autorizar = useAutorizacion();
-  const { esAdmin } = useAuth();
+  const { puede } = useAuth();
   const { data: v, setData, recargar } = useCarga(() => api<Venta>(`/ventas/${id}`), [id]);
   const [reenviando, setReenviando] = useState(false);
   const [corrigiendo, setCorrigiendo] = useState(false);
@@ -158,11 +158,11 @@ function DetalleVenta({ id, cfg, onClose, onCambio }: { id: number; cfg: Configu
         onClose={onClose}
         pie={
           <>
-            {v.estado === 'EMITIDA' && <button className="btn btn-danger" onClick={anular}>Anular</button>}
-            {corregible && <button className="btn" onClick={() => setCorrigiendo(true)}>Corregir</button>}
+            {v.estado === 'EMITIDA' && puede('ventas.anular') && <button className="btn btn-danger" onClick={anular}>Anular</button>}
+            {corregible && puede('ventas.editar') && <button className="btn" onClick={() => setCorrigiendo(true)}>Corregir</button>}
             <span className="grow" />
             {v.hashCpe && <button className="btn" onClick={verXml}>Descargar XML</button>}
-            {esAdmin && (v.estadoSunat === 'PENDIENTE' || v.estadoSunat === 'RECHAZADO') && (
+            {puede('ventas.sunat') && (v.estadoSunat === 'PENDIENTE' || v.estadoSunat === 'RECHAZADO') && (
               <button className="btn" onClick={reenviar} disabled={reenviando}>{reenviando ? 'Enviando…' : 'Reenviar a SUNAT'}</button>
             )}
             <button className="btn" onClick={() => void imprimirVenta(v, cfg)}>Reimprimir</button>

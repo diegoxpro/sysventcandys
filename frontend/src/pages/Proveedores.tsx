@@ -10,7 +10,7 @@ import { Proveedor } from '../types';
 const POR_PAGINA = 12;
 
 export default function Proveedores() {
-  const { esAdmin } = useAuth();
+  const { puede } = useAuth();
   const avisar = useToast();
   const [texto, setTexto] = useState('');
   const q = useDebounce(texto.trim());
@@ -42,7 +42,7 @@ export default function Proveedores() {
     setF(aFormProveedor(p));
   };
 
-  const puedeGuardar = esAdmin && proveedorValido(f) && !guardando;
+  const puedeGuardar = puede('proveedores.editar') && proveedorValido(f) && !guardando;
 
   const guardar = async () => {
     if (!puedeGuardar) return;
@@ -114,7 +114,7 @@ export default function Proveedores() {
                         <button className="btn btn-ghost btn-sm" title="Editar" aria-label={`Editar ${p.razonSocial}`} onClick={(e) => (e.stopPropagation(), editar(p))}>
                           <Icono nombre="editar" tam={16} />
                         </button>
-                        {esAdmin && (
+                        {puede('proveedores.editar') && (
                           <button className="btn btn-ghost btn-sm texto-peligro" title="Eliminar" aria-label={`Eliminar ${p.razonSocial}`} onClick={(e) => (e.stopPropagation(), eliminar(p))}>
                             <Icono nombre="borrar" tam={16} />
                           </button>
@@ -161,7 +161,7 @@ export default function Proveedores() {
             }}
           />
 
-          {!esAdmin && <div className="aviso aviso-info">Solo el administrador puede registrar o cambiar proveedores.</div>}
+          {!puede('proveedores.editar') && <div className="aviso aviso-info">No tienes permiso para registrar o cambiar proveedores.</div>}
 
           <div className="row cliente-pie">
             <button className="btn btn-lg" onClick={nuevo}><Icono nombre="limpiar" /> Limpiar</button>

@@ -1,7 +1,41 @@
 export type Rol = 'ADMIN' | 'CAJERO';
 export type Dec = string | number;
 
-export interface Usuario { id: number; usuario: string; nombre: string; rol: Rol; activo?: boolean }
+export type ClavePermiso =
+  | 'ventas.vender' | 'ventas.caja' | 'ventas.ver' | 'ventas.descuento' | 'ventas.editar' | 'ventas.anular' | 'ventas.sunat'
+  | 'clientes.editar' | 'clientes.eliminar'
+  | 'compras.ver' | 'compras.registrar' | 'compras.pagar' | 'proveedores.editar'
+  | 'productos.editar' | 'productos.importar' | 'stock.ajustar' | 'inventario.realizar'
+  | 'reportes.ventas' | 'reportes.compras' | 'reportes.kardex' | 'reportes.sunat'
+  | 'config.preferencias' | 'config.usuarios' | 'config.series' | 'config.sunat' | 'config.backup' | 'config.red';
+
+export interface PermisoEfectivo {
+  permiso: ClavePermiso;
+  /** ROL = viene de su rol; USUARIO = se le dio aparte. */
+  origen: 'ROL' | 'USUARIO';
+  hasta: string | null;
+  nombre?: string;
+}
+
+export interface Usuario {
+  id: number;
+  usuario: string;
+  nombre: string;
+  rol: Rol;
+  activo?: boolean;
+  perfil?: { id: number; nombre: string } | null;
+  permisos: PermisoEfectivo[];
+}
+
+/** Rol del personal (el administrador es fijo). */
+export interface Perfil {
+  id: number;
+  nombre: string;
+  permisos: ClavePermiso[];
+  usuarios: { id: number; nombre: string; activo: boolean }[];
+}
+
+export interface PermisoCatalogo { clave: ClavePermiso; grupo: string; nombre: string }
 export interface Catalogo { id: number; nombre: string }
 
 export interface Producto {

@@ -8,8 +8,8 @@ import { diasHasta, fecha, money, n, qty } from '../format';
 import { Alertas, Compra, EstadoBackup, EstadoSunatGeneral, Lote } from '../types';
 
 export default function Inicio() {
-  const { usuario, esAdmin } = useAuth();
-  const { data: backup } = useCarga(() => (esAdmin ? api<EstadoBackup>('/backups') : Promise.resolve(null)), [esAdmin]);
+  const { usuario, puede } = useAuth();
+  const { data: backup } = useCarga(() => (puede('config.backup') ? api<EstadoBackup>('/backups') : Promise.resolve(null)), [puede('config.backup')]);
   const { data: a, recargar } = useCarga(() => api<Alertas>('/inventario/alertas'), []);
   const { data: pendientes } = useCarga(() => api<Compra[]>(`/compras${qs({ pendientes: 1 })}`), []);
   const { data: sunat } = useCarga(() => api<EstadoSunatGeneral>('/sunat/estado'), []);

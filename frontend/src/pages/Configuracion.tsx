@@ -1,29 +1,46 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
-import { Campo, Modal, useCarga, useToast } from '../components/ui';
+import { Campo, useCarga, useToast } from '../components/ui';
 import ImportarProductos from './ImportarProductos';
+import { Roles, Usuarios } from './UsuariosRoles';
 import { fecha, fechaHora, n, precioSugerido } from '../format';
 import { Marca, prepararImagen, TipoImagen, urlImagen, useMarca } from '../marca';
-import { Configuracion as Config, EstadoBackup, EstadoSunatGeneral, Rol, Serie, SUNAT_LABEL, Usuario } from '../types';
+import { ClavePermiso, Configuracion as Config, EstadoBackup, EstadoSunatGeneral, Serie, SUNAT_LABEL } from '../types';
+
+type Pestana = 'preferencias' | 'imagenes' | 'importar' | 'series' | 'usuarios' | 'roles' | 'sunat' | 'backup' | 'red' | 'cuenta';
+
+const PESTANAS: { id: Pestana; titulo: string; permiso?: ClavePermiso }[] = [
+  { id: 'preferencias', titulo: 'Preferencias', permiso: 'config.preferencias' },
+  { id: 'imagenes', titulo: 'Logotipos', permiso: 'config.preferencias' },
+  { id: 'importar', titulo: 'Importar productos', permiso: 'productos.importar' },
+  { id: 'series', titulo: 'Comprobantes', permiso: 'config.series' },
+  { id: 'usuarios', titulo: 'Usuarios', permiso: 'config.usuarios' },
+  { id: 'roles', titulo: 'Roles', permiso: 'config.usuarios' },
+  { id: 'sunat', titulo: 'SUNAT', permiso: 'config.sunat' },
+  { id: 'backup', titulo: 'Backup', permiso: 'config.backup' },
+  { id: 'red', titulo: 'Red local', permiso: 'config.red' },
+  { id: 'cuenta', titulo: 'Mi contraseña' },
+];
+
+/** ¿Tiene alguna pestaña de configuración además de su contraseña? */
+export const veConfiguracion = (puede: (p: ClavePermiso) => boolean) => PESTANAS.some((p) => p.permiso && puede(p.permiso));
 
 export default function Configuracion() {
-  const { esAdmin } = useAuth();
-  const [tab, setTab] = useState(esAdmin ? 'preferencias' : 'cuenta');
+  const { puede } = useAuth();
+  const visibles = PESTANAS.filter((p) => !p.permiso || puede(p.permiso));
+  const [elegida, setTab] = useState<Pestana>(visibles[0].id);
+  // Si pierde el permiso de la pestaña abierta, pasa a la primera que le quede.
+  const tab = visibles.some((p) => p.id === elegida) ? elegida : visibles[0].id;
+  const completa = visibles.length > 1;
   return (
     <div className="stack">
-      <div className="page-head"><div><h1>{esAdmin ? 'Configuración' : 'Mi cuenta'}</h1></div></div>
-      {esAdmin && (
+      <div className="page-head"><div><h1>{completa ? 'Configuración' : 'Mi cuenta'}</h1></div></div>
+      {completa && (
         <div className="tabs">
-          <button className={tab === 'preferencias' ? 'active' : ''} onClick={() => setTab('preferencias')}>Preferencias</button>
-          <button className={tab === 'imagenes' ? 'active' : ''} onClick={() => setTab('imagenes')}>Logotipos</button>
-          <button className={tab === 'importar' ? 'active' : ''} onClick={() => setTab('importar')}>Importar productos</button>
-          <button className={tab === 'series' ? 'active' : ''} onClick={() => setTab('series')}>Comprobantes</button>
-          <button className={tab === 'usuarios' ? 'active' : ''} onClick={() => setTab('usuarios')}>Usuarios</button>
-          <button className={tab === 'sunat' ? 'active' : ''} onClick={() => setTab('sunat')}>SUNAT</button>
-          <button className={tab === 'backup' ? 'active' : ''} onClick={() => setTab('backup')}>Backup</button>
-          <button className={tab === 'red' ? 'active' : ''} onClick={() => setTab('red')}>Red local</button>
-          <button className={tab === 'cuenta' ? 'active' : ''} onClick={() => setTab('cuenta')}>Mi contraseña</button>
+          {visibles.map((p) => (
+            <button key={p.id} className={tab === p.id ? 'active' : ''} onClick={() => setTab(p.id)}>{p.titulo}</button>
+          ))}
         </div>
       )}
       {tab === 'preferencias' && <Preferencias />}
@@ -31,6 +48,7 @@ export default function Configuracion() {
       {tab === 'importar' && <ImportarProductos />}
       {tab === 'series' && <Series />}
       {tab === 'usuarios' && <Usuarios />}
+      {tab === 'roles' && <Roles />}
       {tab === 'sunat' && <Sunat />}
       {tab === 'backup' && <Backups />}
       {tab === 'red' && <RedLocal />}
@@ -599,78 +617,6 @@ function Series() {
         </tbody>
       </table>
     </div>
-  );
-}
-
-function Usuarios() {
-  const { data, recargar } = useCarga(() => api<Usuario[]>('/usuarios'), []);
-  const [editar, setEditar] = useState<Usuario | 'nuevo' | null>(null);
-  return (
-    <div className="card" style={{ maxWidth: 820 }}>
-      <div className="card-head">
-        <h2>Usuarios</h2>
-        <button className="btn btn-primary btn-sm" onClick={() => setEditar('nuevo')}>Nuevo usuario</button>
-      </div>
-      <table>
-        <thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Estado</th></tr></thead>
-        <tbody>
-          {data?.map((u) => (
-            <tr key={u.id} className="clickable" onClick={() => setEditar(u)}>
-              <td className="mono">{u.usuario}</td>
-              <td>{u.nombre}</td>
-              <td><span className={`badge ${u.rol === 'ADMIN' ? 'accent' : ''}`}>{u.rol === 'ADMIN' ? 'Administrador' : 'Cajero'}</span></td>
-              <td>{u.activo ? <span className="badge ok">Activo</span> : <span className="badge">Inactivo</span>}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {editar && <UsuarioForm usuario={editar === 'nuevo' ? undefined : editar} onClose={() => setEditar(null)} onListo={() => (setEditar(null), recargar())} />}
-    </div>
-  );
-}
-
-function UsuarioForm({ usuario, onClose, onListo }: { usuario?: Usuario; onClose: () => void; onListo: () => void }) {
-  const avisar = useToast();
-  const [f, setF] = useState({ usuario: usuario?.usuario ?? '', nombre: usuario?.nombre ?? '', password: '', rol: usuario?.rol ?? ('CAJERO' as Rol), activo: usuario?.activo ?? true });
-  const guardar = async () => {
-    try {
-      if (usuario) {
-        await api(`/usuarios/${usuario.id}`, { method: 'PATCH', body: { nombre: f.nombre, rol: f.rol, activo: f.activo, password: f.password || undefined } });
-      } else {
-        await api('/usuarios', { body: { usuario: f.usuario, nombre: f.nombre, password: f.password, rol: f.rol } });
-      }
-      avisar('Usuario guardado');
-      onListo();
-    } catch (e) {
-      avisar((e as Error).message, true);
-    }
-  };
-  return (
-    <Modal
-      titulo={usuario ? `Editar ${usuario.usuario}` : 'Nuevo usuario'}
-      onClose={onClose}
-      pie={
-        <>
-          <button className="btn" onClick={onClose}>Cancelar</button>
-          <button className="btn btn-primary" onClick={guardar} disabled={f.nombre.length < 2 || (!usuario && (f.usuario.length < 3 || f.password.length < 6))}>Guardar</button>
-        </>
-      }
-    >
-      <div className="grid-2">
-        <Campo label="Usuario"><input className="mono" value={f.usuario} disabled={!!usuario} onChange={(e) => setF({ ...f, usuario: e.target.value.toLowerCase() })} autoFocus /></Campo>
-        <Campo label="Nombre"><input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} /></Campo>
-        <Campo label={usuario ? 'Nueva contraseña' : 'Contraseña'} ayuda={usuario ? 'Déjala vacía para no cambiarla' : 'Mínimo 6 caracteres'}>
-          <input type="password" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} autoComplete="new-password" />
-        </Campo>
-        <Campo label="Rol">
-          <select value={f.rol} onChange={(e) => setF({ ...f, rol: e.target.value as Rol })}>
-            <option value="CAJERO">Cajero</option>
-            <option value="ADMIN">Administrador</option>
-          </select>
-        </Campo>
-        {usuario && <label className="check"><input type="checkbox" checked={f.activo} onChange={(e) => setF({ ...f, activo: e.target.checked })} /> Activo</label>}
-      </div>
-    </Modal>
   );
 }
 

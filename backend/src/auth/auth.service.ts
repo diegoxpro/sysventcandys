@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, UnauthorizedExcept
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
+import { PERMISOS } from './permisos';
 import { PermisosService } from './permisos.service';
 
 @Injectable()
@@ -28,7 +29,8 @@ export class AuthService {
     });
     if (!u || !u.activo) throw new UnauthorizedException('Tu usuario está desactivado');
     const { activo: _a, ...datos } = u;
-    return { ...datos, permisos: await this.permisos.efectivos(id) };
+    const permisos = (await this.permisos.efectivos(id)).map((p) => ({ ...p, nombre: PERMISOS[p.permiso].nombre }));
+    return { ...datos, permisos };
   }
 
   /**
