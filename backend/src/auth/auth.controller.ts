@@ -23,9 +23,10 @@ export class AuthController {
     return this.auth.login(dto.usuario, dto.password);
   }
 
+  /** Datos del usuario con sus permisos al día (el menú los vuelve a pedir cada minuto). */
   @Get('yo')
   yo(@UsuarioActual() user: UsuarioSesion) {
-    return user;
+    return this.auth.yo(user.id);
   }
 
   @Post('cambiar-password')

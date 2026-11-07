@@ -55,3 +55,14 @@ export function margenReal(costo: number, precio: number) {
 const importe = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 /** Monto sin "S/": para columnas cuya cabecera ya dice la moneda. */
 export const monto = (v: unknown) => importe.format(n(v));
+
+/** "hoy hasta las 11:59 p. m." / "hasta el 08/11/2026 10:00 a. m." */
+export function venceTexto(v: string) {
+  const d = new Date(v);
+  const hora = d.toLocaleTimeString('es-PE', { hour: 'numeric', minute: '2-digit' });
+  const hoy = new Date();
+  const manana = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + 1);
+  if (d.toDateString() === hoy.toDateString()) return `hoy hasta las ${hora}`;
+  if (d.toDateString() === manana.toDateString()) return `mañana hasta las ${hora}`;
+  return `hasta el ${d.toLocaleDateString('es-PE')} ${hora}`;
+}

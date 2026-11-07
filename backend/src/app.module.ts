@@ -5,7 +5,7 @@ import { AuthModule } from './auth/auth.module';
 import { BackupModule } from './backup/backup.module';
 import { CajaModule } from './caja/caja.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
-import { RolesGuard } from './auth/roles.guard';
+import { PermisosGuard } from './auth/permisos.guard';
 import { ComprasModule } from './compras/compras.module';
 import { ConfiguracionModule } from './configuracion/configuracion.module';
 import { ImportacionModule } from './importacion/importacion.module';
@@ -38,7 +38,7 @@ import { VentasModule } from './ventas/ventas.module';
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
-    { provide: APP_GUARD, useClass: RolesGuard },
+    { provide: APP_GUARD, useClass: PermisosGuard },
   ],
 })
 export class AppModule {}

@@ -65,23 +65,31 @@ model Usuario {
   usuario      String   @unique
   nombre       String
   passwordHash String
+  // ADMIN = administrador fijo con todo. CAJERO = personal: sus permisos
+  // salen de su rol (perfil) más los cambios propios del usuario.
   rol          Rol      @default(CAJERO)
+  perfilId     Int?
   activo       Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  movimientos       MovimientoStock[]
-  compras           Compra[]
-  pagos             PagoProveedor[]
-  ventas            Venta[]           @relation("VentaUsuario")
-  ventasAnuladas    Venta[]           @relation("VentaAnulador")
-  edicionesVenta    VentaEdicion[]
-  ventasAutorizadas Venta[]           @relation("VentaAutorizador")
-  cajasAbiertas     Caja[]            @relation("CajaApertura")
-  inventarios       Inventario[]
+  perfil               Perfil?              @relation(fields: [perfilId], references: [id])
+  permisos             PermisoUsuario[]     @relation("PermisoUsuario")
+  permisosDados        PermisoUsuario[]     @relation("PermisoDadoPor")
+  historialPermisos    PermisoHistorial[]   @relation("HistorialUsuario")
+  cambiosPermisos      PermisoHistorial[]   @relation("HistorialHechoPor")
+  movimientos          MovimientoStock[]
+  compras              Compra[]
+  pagos                PagoProveedor[]
+  ventas               Venta[]              @relation("VentaUsuario")
+  ventasAnuladas       Venta[]              @relation("VentaAnulador")
+  edicionesVenta       VentaEdicion[]
+  ventasAutorizadas    Venta[]              @relation("VentaAutorizador")
+  cajasAbiertas        Caja[]               @relation("CajaApertura")
+  inventarios          Inventario[]
   operadoresInventario InventarioOperador[]
-  cajasCerradas     Caja[]            @relation("CajaCierre")
-  movimientosCaja   MovimientoCaja[]
+  cajasCerradas        Caja[]               @relation("CajaCierre")
+  movimientosCaja      MovimientoCaja[]
 }
 
 // Fila única (id = 1) con los datos de la tienda y las preferencias.
@@ -174,13 +182,13 @@ model Producto {
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
 
-  categoria   Categoria?        @relation(fields: [categoriaId], references: [id])
-  marca       Marca?            @relation(fields: [marcaId], references: [id])
-  lotes          Lote[]
-  movimientos    MovimientoStock[]
-  compraItems    CompraItem[]
-  ventaItems     VentaItem[]
-  presentaciones Presentacion[]
+  categoria       Categoria?        @relation(fields: [categoriaId], references: [id])
+  marca           Marca?            @relation(fields: [marcaId], references: [id])
+  lotes           Lote[]
+  movimientos     MovimientoStock[]
+  compraItems     CompraItem[]
+  ventaItems      VentaItem[]
+  presentaciones  Presentacion[]
   inventarioItems InventarioItem[]
 
   @@index([nombre])
@@ -639,7 +647,7 @@ model Inventario {
   validadoAt  DateTime?
   observacion String?
 
-  usuario    Usuario               @relation(fields: [usuarioId], references: [id])
+  usuario    Usuario              @relation(fields: [usuarioId], references: [id])
   operadores InventarioOperador[]
   items      InventarioItem[]
   conteos    InventarioConteo[]
@@ -667,17 +675,17 @@ model InventarioOperador {
 
 // Resultado por producto: lo que se tomará al validar.
 model InventarioItem {
-  id               Int       @id @default(autoincrement())
-  inventarioId     Int
-  productoId       Int
-  cantidad         Decimal   @db.Decimal(12, 3)
+  id              Int      @id @default(autoincrement())
+  inventarioId    Int
+  productoId      Int
+  cantidad        Decimal  @db.Decimal(12, 3)
   // Stock del sistema cuando se contó (el del conteo que define la cantidad).
-  stockReferencia  Decimal   @db.Decimal(12, 3)
+  stockReferencia Decimal  @db.Decimal(12, 3)
   // Cuándo se tomó ese conteo: los lotes creados después (compras) no se tocan al validar.
-  contadoEn        DateTime  @default(now())
+  contadoEn       DateTime @default(now())
   // Detalle por fecha de vencimiento: [{ "fecha": "2026-12-15", "cantidad": 10 }]. Suma = cantidad.
-  lotes            Json      @default("[]")
-  actualizado      DateTime  @default(now())
+  lotes           Json     @default("[]")
+  actualizado     DateTime @default(now())
 
   inventario Inventario         @relation(fields: [inventarioId], references: [id])
   producto   Producto           @relation(fields: [productoId], references: [id])
@@ -688,22 +696,80 @@ model InventarioItem {
 
 // Cada envío de un celular, tal cual llegó.
 model InventarioConteo {
-  id               Int          @id @default(autoincrement())
-  inventarioId     Int
-  itemId           Int
-  operadorId       Int
-  cantidad         Decimal      @db.Decimal(12, 3)
-  stockAlContar    Decimal      @db.Decimal(12, 3)
+  id            Int          @id @default(autoincrement())
+  inventarioId  Int
+  itemId        Int
+  operadorId    Int
+  cantidad      Decimal      @db.Decimal(12, 3)
+  stockAlContar Decimal      @db.Decimal(12, 3)
   // Mismo formato que InventarioItem.lotes.
-  lotes            Json         @default("[]")
-  estado           EstadoConteo @default(APLICADO)
+  lotes         Json         @default("[]")
+  estado        EstadoConteo @default(APLICADO)
   // Id generado en el celular: si reenvía por mala señal no se duplica.
-  clienteId        String       @unique
-  fecha            DateTime     @default(now())
+  clienteId     String       @unique
+  fecha         DateTime     @default(now())
 
   inventario Inventario         @relation(fields: [inventarioId], references: [id])
   item       InventarioItem     @relation(fields: [itemId], references: [id])
   operador   InventarioOperador @relation(fields: [operadorId], references: [id])
 
   @@index([inventarioId, id])
+}
+
+// ---------------------------------------------------------------------------
+// Roles y permisos
+
+/**
+ * Rol del personal (ej. Cajero). El administrador no usa perfil: tiene todo.
+ */
+model Perfil {
+  id        Int      @id @default(autoincrement())
+  nombre    String   @unique
+  // Claves del catálogo de permisos (backend/src/auth/permisos.ts).
+  permisos  String[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  usuarios Usuario[]
+}
+
+/**
+ * Permiso que se le da o se le quita a un usuario aparte de su rol.
+ */
+model PermisoUsuario {
+  id        Int       @id @default(autoincrement())
+  usuarioId Int
+  permiso   String
+  // true = se le da; false = se le quita aunque su rol lo tenga.
+  concedido Boolean
+  // null = permanente; si no, vale hasta esta fecha y hora.
+  hasta     DateTime?
+  dadoPorId Int
+  createdAt DateTime  @default(now())
+
+  usuario Usuario @relation("PermisoUsuario", fields: [usuarioId], references: [id])
+  dadoPor Usuario @relation("PermisoDadoPor", fields: [dadoPorId], references: [id])
+
+  @@unique([usuarioId, permiso])
+}
+
+/**
+ * Quién dio o quitó cada permiso, o cambió un rol, y cuándo.
+ */
+model PermisoHistorial {
+  id         Int       @id @default(autoincrement())
+  usuarioId  Int?
+  perfilId   Int?
+  permiso    String?
+  // DAR, QUITAR, RESTABLECER (vuelve a lo del rol), CAMBIAR_ROL, EDITAR_ROL, CREAR_ROL, ELIMINAR_ROL
+  accion     String
+  hasta      DateTime?
+  detalle    String?
+  hechoPorId Int
+  createdAt  DateTime  @default(now())
+
+  usuario  Usuario? @relation("HistorialUsuario", fields: [usuarioId], references: [id])
+  hechoPor Usuario  @relation("HistorialHechoPor", fields: [hechoPorId], references: [id])
+
+  @@index([usuarioId, createdAt])
 }

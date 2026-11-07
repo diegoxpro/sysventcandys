@@ -1,7 +1,6 @@
 import { Body, Controller, Get, Param, ParseIntPipe, Patch } from '@nestjs/common';
-import { Rol } from '@prisma/client';
 import { IsBoolean, IsInt, IsOptional, Min } from 'class-validator';
-import { Roles } from '../auth/decorators';
+import { Permiso } from '../auth/decorators';
 import { PrismaService } from '../prisma/prisma.service';
 
 class EditarSerieDto {
@@ -18,7 +17,7 @@ export class SeriesController {
     return this.prisma.serie.findMany({ orderBy: { id: 'asc' } });
   }
 
-  @Roles(Rol.ADMIN)
+  @Permiso('config.series')
   @Patch(':id')
   editar(@Param('id', ParseIntPipe) id: number, @Body() dto: EditarSerieDto) {
     return this.prisma.serie.update({ where: { id }, data: dto });

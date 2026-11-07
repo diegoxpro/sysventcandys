@@ -1,6 +1,5 @@
 import { Body, Controller, Get, Param, ParseIntPipe, Post, Query } from '@nestjs/common';
-import { Rol } from '@prisma/client';
-import { Roles, UsuarioActual, UsuarioSesion } from '../auth/decorators';
+import { Permiso, UsuarioActual, UsuarioSesion } from '../auth/decorators';
 import { AnularDto, CrearCompraDto, PagoDto } from './compras.dto';
 import { ComprasService } from './compras.service';
 
@@ -8,6 +7,7 @@ import { ComprasService } from './compras.service';
 export class ComprasController {
   constructor(private readonly compras: ComprasService) {}
 
+  @Permiso('compras.ver')
   @Get()
   listar(
     @Query('desde') desde?: string,
@@ -23,6 +23,7 @@ export class ComprasController {
     });
   }
 
+  @Permiso('compras.ver')
   @Get(':id')
   obtener(@Param('id', ParseIntPipe) id: number) {
     return this.compras.obtener(id);
@@ -33,19 +34,19 @@ export class ComprasController {
     return this.compras.sugerencias(id);
   }
 
-  @Roles(Rol.ADMIN)
+  @Permiso('compras.registrar')
   @Post()
   crear(@Body() dto: CrearCompraDto, @UsuarioActual() user: UsuarioSesion) {
     return this.compras.crear(dto, user.id);
   }
 
-  @Roles(Rol.ADMIN)
+  @Permiso('compras.pagar')
   @Post(':id/pagos')
   pagar(@Param('id', ParseIntPipe) id: number, @Body() dto: PagoDto, @UsuarioActual() user: UsuarioSesion) {
     return this.compras.pagar(id, dto, user.id);
   }
 
-  @Roles(Rol.ADMIN)
+  @Permiso('compras.registrar')
   @Post(':id/anular')
   anular(@Param('id', ParseIntPipe) id: number, @Body() dto: AnularDto, @UsuarioActual() user: UsuarioSesion) {
     return this.compras.anular(id, dto, user.id);

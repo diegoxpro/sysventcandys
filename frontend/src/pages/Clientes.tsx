@@ -28,7 +28,7 @@ const aForm = (c: Cliente): Form => ({
 });
 
 export default function Clientes() {
-  const { esAdmin } = useAuth();
+  const { puede } = useAuth();
   const avisar = useToast();
   const [texto, setTexto] = useState('');
   const q = useDebounce(texto.trim());
@@ -175,7 +175,7 @@ export default function Clientes() {
                         <button className="btn btn-ghost btn-sm" title="Editar" aria-label={`Editar ${c.nombre}`} onClick={(e) => (e.stopPropagation(), editar(c))}>
                           <Icono nombre="editar" tam={16} />
                         </button>
-                        {esAdmin && (
+                        {puede('clientes.eliminar') && (
                           <button className="btn btn-ghost btn-sm texto-peligro" title="Eliminar" aria-label={`Eliminar ${c.nombre}`} onClick={(e) => (e.stopPropagation(), eliminar(c))}>
                             <Icono nombre="borrar" tam={16} />
                           </button>

@@ -1,7 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { EstadoCaja, EstadoSunat, EstadoVenta, MedioPago, Prisma, TipoComprobante, TipoMovimiento } from '@prisma/client';
 import { AuthService } from '../auth/auth.service';
 import { UsuarioSesion } from '../auth/decorators';
+import { PermisosService } from '../auth/permisos.service';
 import { CajaService } from '../caja/caja.service';
 import { ConfiguracionService } from '../configuracion/configuracion.service';
 import { StockService } from '../inventario/stock.service';
@@ -46,6 +47,7 @@ export class VentasService {
     private readonly caja: CajaService,
     private readonly config: ConfiguracionService,
     private readonly auth: AuthService,
+    private readonly permisos: PermisosService,
     private readonly sunat: SunatService,
   ) {}
 
@@ -82,6 +84,9 @@ export class VentasService {
 
     // Descuentos y precios distintos al de lista los autoriza un administrador.
     const requiereAutorizacion = (dto.descuento ?? 0) > 0 || lineas.some((l) => l.descuento > 0 || l.precioUnitario < l.lista);
+    if (requiereAutorizacion && !(await this.permisos.tiene(user, 'ventas.descuento'))) {
+      throw new ForbiddenException('No tienes permiso para dar descuentos ni cambiar precios');
+    }
     const autorizadoPorId = requiereAutorizacion ? await this.auth.autorizarAdmin(user, dto.autorizacion) : null;
 
     let totales: ReturnType<typeof calcularTotales>;

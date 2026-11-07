@@ -174,3 +174,5 @@
 .cliente-form .proveedor-doc { grid-template-columns: 1fr; }
 .proveedores-grid td:nth-child(2) { min-width: 170px; white-space: normal; }
 .proveedores-grid td:nth-child(3) { white-space: nowrap; }
+.aviso-temporal { margin-bottom: 12px; }
+.grupo-permisos { padding-top: 16px; font-weight: 600; color: var(--text-2); background: var(--surface-2, transparent); }

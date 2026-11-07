@@ -1,7 +1,6 @@
 import { BadRequestException, Body, Controller, Get, Header, Param, ParseIntPipe, Post } from '@nestjs/common';
-import { Rol } from '@prisma/client';
 import { IsOptional, IsString, MaxLength } from 'class-validator';
-import { Roles } from '../auth/decorators';
+import { Permiso } from '../auth/decorators';
 import { PrismaService } from '../prisma/prisma.service';
 import { SunatService } from './sunat.service';
 
@@ -28,7 +27,7 @@ export class SunatController {
     return this.sunat.estado();
   }
 
-  @Roles(Rol.ADMIN)
+  @Permiso('config.sunat')
   @Post('certificado')
   async certificado(@Body() dto: CertificadoDto) {
     try {
@@ -38,13 +37,13 @@ export class SunatController {
     }
   }
 
-  @Roles(Rol.ADMIN)
+  @Permiso('config.sunat')
   @Post('sol')
   sol(@Body() dto: SolDto) {
     return this.sunat.guardarSol(dto.usuario, dto.clave);
   }
 
-  @Roles(Rol.ADMIN)
+  @Permiso('config.sunat')
   @Post('probar-beta')
   async probarBeta() {
     try {
@@ -61,7 +60,7 @@ export class SunatController {
     return this.sunat.estado();
   }
 
-  @Roles(Rol.ADMIN)
+  @Permiso('ventas.sunat')
   @Post('ventas/:id/reenviar')
   async reenviar(@Param('id', ParseIntPipe) id: number) {
     await this.prisma.venta.update({ where: { id }, data: { xmlFirmado: null } });

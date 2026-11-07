@@ -1,8 +1,7 @@
 import { BadRequestException, Body, Controller, Get, Put } from '@nestjs/common';
-import { Rol } from '@prisma/client';
 import { IsOptional, IsString } from 'class-validator';
 import { isIPv4 } from 'net';
-import { Publico, Roles } from '../auth/decorators';
+import { Publico, Permiso } from '../auth/decorators';
 import { ConfiguracionService } from '../configuracion/configuracion.service';
 import { fijarIpConfigurada, ipPrincipal, ipsDetectadas, origenIp, puertos } from './certificados';
 import { estadoRed, renovarCertificado, urlEntrada, urlHttps } from './servidor-red';
@@ -39,7 +38,7 @@ export class RedController {
   }
 
   /** Configuración › Red local: guarda la IP actual de la PC y rehace el certificado. */
-  @Roles(Rol.ADMIN)
+  @Permiso('config.red')
   @Put('ip')
   async cambiarIp(@Body() dto: IpDto) {
     const ip = dto.ip?.trim() || 'auto';

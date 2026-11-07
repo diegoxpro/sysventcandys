@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
+import { useAuth } from '../auth';
 import { useAutorizacion } from '../autorizacion';
 import { BORRADOR_VENTA, guardarBorrador, leerBorrador } from '../borrador';
 import BuscadorProducto from '../components/BuscadorProducto';
@@ -47,6 +48,7 @@ const factorDe = (l: Linea) => n(l.presentacion?.factor ?? 1);
 export default function Venta() {
   const avisar = useToast();
   const autorizar = useAutorizacion();
+  const { puede } = useAuth();
   const buscador = useRef<HTMLInputElement>(null);
   const { data: caja, cargando: cargandoCaja } = useCarga(() => api<Caja | null>('/caja/actual'), []);
   const { data: cfg } = useCarga(() => api<Configuracion>('/configuracion'), []);
@@ -134,6 +136,7 @@ export default function Venta() {
   }, []);
 
   const pedirDescuento = () => {
+    if (!puede('ventas.descuento')) return avisar('No tienes permiso para dar descuentos', true);
     const v = window.prompt('Descuento total en soles (requiere administrador)', String(b.descuento || ''));
     if (v === null) return;
     const d = r2(n(v));

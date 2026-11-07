@@ -1,9 +1,8 @@
 import { Controller, Get, Post } from '@nestjs/common';
-import { Rol } from '@prisma/client';
-import { Roles } from '../auth/decorators';
+import { Permiso } from '../auth/decorators';
 import { BackupService } from './backup.service';
 
-@Roles(Rol.ADMIN)
+@Permiso('config.backup')
 @Controller('backups')
 export class BackupController {
   constructor(private readonly backup: BackupService) {}

@@ -16,7 +16,7 @@ export interface MermaInicial {
 
 export default function MermaModal({ inicial, onClose, onListo }: { inicial: MermaInicial; onClose: () => void; onListo: () => void }) {
   const avisar = useToast();
-  const { esAdmin } = useAuth();
+  const { puede } = useAuth();
   const [cantidad, setCantidad] = useState(String(inicial.cantidad ?? ''));
   const [motivo, setMotivo] = useState(inicial.motivo ?? '');
   const [enviando, setEnviando] = useState(false);
@@ -44,14 +44,14 @@ export default function MermaModal({ inicial, onClose, onListo }: { inicial: Mer
       pie={
         <>
           <button className="btn" onClick={onClose}>Cancelar</button>
-          <button className="btn btn-primary" onClick={guardar} disabled={!esAdmin || enviando || n(cantidad) <= 0 || motivo.trim().length < 3}>
+          <button className="btn btn-primary" onClick={guardar} disabled={!puede('stock.ajustar') || enviando || n(cantidad) <= 0 || motivo.trim().length < 3}>
             Registrar merma
           </button>
         </>
       }
     >
       <div className="stack">
-        {!esAdmin && <div className="alert warn">Solo el administrador puede registrar mermas.</div>}
+        {!puede('stock.ajustar') && <div className="alert warn">No tienes permiso para registrar mermas.</div>}
         <div>
           <h3>{inicial.nombre}</h3>
           {inicial.lote && (

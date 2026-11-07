@@ -1,7 +1,7 @@
 import { BadRequestException, Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query } from '@nestjs/common';
-import { Prisma, Rol, TipoDocIdentidad } from '@prisma/client';
+import { Prisma, TipoDocIdentidad } from '@prisma/client';
 import { IsBoolean, IsEmail, IsEnum, IsOptional, IsString, MinLength } from 'class-validator';
-import { Roles } from '../auth/decorators';
+import { Permiso } from '../auth/decorators';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConsultaDocService } from './consulta-doc.service';
 
@@ -64,6 +64,7 @@ export class ClientesController {
     return this.prisma.cliente.findUniqueOrThrow({ where: { id } });
   }
 
+  @Permiso('clientes.editar')
   @Post()
   async crear(@Body() dto: ClienteDto) {
     const data = this.datos(dto);
@@ -75,6 +76,7 @@ export class ClientesController {
     return this.prisma.cliente.create({ data });
   }
 
+  @Permiso('clientes.editar')
   @Patch(':id')
   async editar(@Param('id', ParseIntPipe) id: number, @Body() dto: ClienteDto) {
     const data = this.datos(dto);
@@ -86,7 +88,7 @@ export class ClientesController {
   }
 
   /** Borra el cliente; si ya tiene ventas solo lo deja inactivo para no perder el historial. */
-  @Roles(Rol.ADMIN)
+  @Permiso('clientes.eliminar')
   @Delete(':id')
   async eliminar(@Param('id', ParseIntPipe) id: number) {
     const ventas = await this.prisma.venta.count({ where: { clienteId: id } });

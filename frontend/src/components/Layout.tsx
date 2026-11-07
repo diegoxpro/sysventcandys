@@ -3,6 +3,8 @@ import { ReactNode, useEffect, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { urlImagen, useMarca } from '../marca';
+import { veConfiguracion } from '../pages/Configuracion';
+import { venceTexto } from '../format';
 import { Alertas } from '../types';
 import { Icono, NombreIcono } from './icons';
 import { useCarga } from './ui';
@@ -63,7 +65,11 @@ function Seccion({ id, titulo, icono, rutas, abiertas, alternar, children }: {
 }
 
 export default function Layout() {
-  const { usuario, salir, esAdmin } = useAuth();
+  const { usuario, salir, puede } = useAuth();
+  const rolNombre = usuario?.rol === 'ADMIN' ? 'Administrador' : (usuario?.perfil?.nombre ?? 'Personal');
+  // Permisos dados solo por un tiempo: se avisa hasta cuándo valen.
+  const temporales = (usuario?.permisos ?? []).filter((p) => p.origen === 'USUARIO' && p.hasta);
+  const hayReportes = (['reportes.ventas', 'reportes.compras', 'reportes.kardex', 'reportes.sunat'] as const).some(puede);
   const { data: alertas } = useCarga(() => api<Alertas>('/inventario/alertas'), []);
   const { marca } = useMarca();
   const logo = urlImagen('LOGO', marca);
@@ -104,39 +110,37 @@ export default function Layout() {
             {nAlertas > 0 && <span className="pill" aria-label={`${nAlertas} alertas`}>{nAlertas}</span>}
           </NavLink>
           <Seccion id="ventas" titulo="Ventas" icono="venta" rutas={['/venta', '/caja', '/ventas', '/clientes']} {...sec}>
-            <Enlace to="/venta" icono="venta">Venta</Enlace>
+            {puede('ventas.vender') && <Enlace to="/venta" icono="venta">Venta</Enlace>}
             <Enlace to="/caja" icono="caja">Caja</Enlace>
-            <Enlace to="/ventas" icono="lista">Ventas realizadas</Enlace>
+            {puede('ventas.ver') && <Enlace to="/ventas" icono="lista">Ventas realizadas</Enlace>}
             <Enlace to="/clientes" icono="clientes">Clientes</Enlace>
           </Seccion>
           <Seccion id="compras" titulo="Compras" icono="compras" rutas={['/compras', '/cuentas-por-pagar', '/proveedores']} {...sec}>
-            <Enlace to="/compras" icono="compras">Compras</Enlace>
-            <Enlace to="/cuentas-por-pagar" icono="pagar">Cuentas por pagar</Enlace>
+            {puede('compras.ver') && <Enlace to="/compras" icono="compras">Compras</Enlace>}
+            {puede('compras.ver') && <Enlace to="/cuentas-por-pagar" icono="pagar">Cuentas por pagar</Enlace>}
             <Enlace to="/proveedores" icono="proveedores">Proveedores</Enlace>
           </Seccion>
           <Seccion id="almacen" titulo="Almacén" icono="inventario" rutas={['/productos', '/inventario']} {...sec}>
             <Enlace to="/productos" icono="productos">Productos</Enlace>
             <Enlace to="/inventario" icono="inventario" end>Inventario y mermas</Enlace>
-            <Enlace to="/inventario/realizar" icono="kardex">Realizar inventario</Enlace>
+            {puede('inventario.realizar') && <Enlace to="/inventario/realizar" icono="kardex">Realizar inventario</Enlace>}
           </Seccion>
-          {esAdmin && (
+          {hayReportes && (
             <Seccion id="reportes" titulo="Reportes" icono="reportes" rutas={['/reportes']} {...sec}>
-              <Enlace to="/reportes/ventas" icono="venta">Reporte de venta</Enlace>
-              <Enlace to="/reportes/compras" icono="compras">Reporte de compra</Enlace>
-              <Enlace to="/reportes/kardex" icono="kardex">Reporte de kardex</Enlace>
-              <Enlace to="/reportes/sunat" icono="lista">Boletas SUNAT</Enlace>
+              {puede('reportes.ventas') && <Enlace to="/reportes/ventas" icono="venta">Reporte de venta</Enlace>}
+              {puede('reportes.compras') && <Enlace to="/reportes/compras" icono="compras">Reporte de compra</Enlace>}
+              {puede('reportes.kardex') && <Enlace to="/reportes/kardex" icono="kardex">Reporte de kardex</Enlace>}
+              {puede('reportes.sunat') && <Enlace to="/reportes/sunat" icono="lista">Boletas SUNAT</Enlace>}
             </Seccion>
           )}
-          <Enlace to="/configuracion" icono="config">{esAdmin ? 'Configuración' : 'Mi cuenta'}</Enlace>
+          <Enlace to="/configuracion" icono="config">{veConfiguracion(puede) ? 'Configuración' : 'Mi cuenta'}</Enlace>
         </nav>
         <div className="sidebar-foot">
           <div className="avatar" aria-hidden="true">{usuario?.nombre.charAt(0).toUpperCase()}</div>
           <div className="grow quien">
             <b>{usuario?.nombre}</b>
             {/* El rol solo se muestra si no repite el nombre (p. ej. el usuario "Administrador"). */}
-            {usuario && usuario.nombre.toLowerCase() !== (usuario.rol === 'ADMIN' ? 'administrador' : 'cajero') && (
-              <span>{usuario.rol === 'ADMIN' ? 'Administrador' : 'Cajero'}</span>
-            )}
+            {usuario && usuario.nombre.toLowerCase() !== rolNombre.toLowerCase() && <span>{rolNombre}</span>}
           </div>
           <button className="salir" onClick={salir} title="Cerrar sesión" aria-label="Cerrar sesión">
             <Icono nombre="salir" />
@@ -144,6 +148,13 @@ export default function Layout() {
         </div>
       </aside>
       <main className="main">
+        {temporales.length > 0 && (
+          <div className="aviso aviso-info aviso-temporal" role="status">
+            {temporales.map((p) => (
+              <div key={p.permiso}>Tienes permiso para <b>{(p.nombre ?? p.permiso).toLowerCase()}</b> {venceTexto(p.hasta!)}</div>
+            ))}
+          </div>
+        )}
         <Outlet />
       </main>
     </div>

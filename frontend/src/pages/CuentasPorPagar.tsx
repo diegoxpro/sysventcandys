@@ -8,7 +8,7 @@ import { diasHasta, fecha, money, n } from '../format';
 import { Compra } from '../types';
 
 export default function CuentasPorPagar() {
-  const { esAdmin } = useAuth();
+  const { puede } = useAuth();
   const { data, recargar, cargando } = useCarga(() => api<Compra[]>(`/compras${qs({ pendientes: 1 })}`), []);
   const [pagar, setPagar] = useState<Compra | null>(null);
 
@@ -60,7 +60,7 @@ export default function CuentasPorPagar() {
                     <td><Link className="mono" to={`/compras/${c.id}`}>{c.serie}-{c.numero}</Link></td>
                     <td className="num">{money(c.total)}</td>
                     <td className="num"><b>{money(c.saldo)}</b></td>
-                    <td className="actions">{esAdmin && <button className="btn btn-sm" onClick={() => setPagar(c)}>Pagar</button>}</td>
+                    <td className="actions">{puede('compras.pagar') && <button className="btn btn-sm" onClick={() => setPagar(c)}>Pagar</button>}</td>
                   </tr>
                 );
               })}
