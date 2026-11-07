@@ -7,6 +7,7 @@ import { ComprasService } from './compras.service';
 export class ComprasController {
   constructor(private readonly compras: ComprasService) {}
 
+  @Permiso('compras.ver')
   @Get()
   listar(
     @Query('desde') desde?: string,
@@ -22,6 +23,7 @@ export class ComprasController {
     });
   }
 
+  @Permiso('compras.ver')
   @Get(':id')
   obtener(@Param('id', ParseIntPipe) id: number) {
     return this.compras.obtener(id);

@@ -117,7 +117,7 @@ export default function Layout() {
           <Seccion id="almacen" titulo="Almacén" icono="inventario" rutas={['/productos', '/inventario']} {...sec}>
             <Enlace to="/productos" icono="productos">Productos</Enlace>
             <Enlace to="/inventario" icono="inventario" end>Inventario y mermas</Enlace>
-            {esAdmin && <Enlace to="/inventario/realizar" icono="kardex">Realizar inventario</Enlace>}
+            <Enlace to="/inventario/realizar" icono="kardex">Realizar inventario</Enlace>
           </Seccion>
           {esAdmin && (
             <Seccion id="reportes" titulo="Reportes" icono="reportes" rutas={['/reportes']} {...sec}>

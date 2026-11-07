@@ -2,12 +2,14 @@ import { BadRequestException, ForbiddenException, Injectable, UnauthorizedExcept
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
+import { PermisosService } from './permisos.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
+    private readonly permisos: PermisosService,
   ) {}
 
   async login(usuario: string, password: string) {
@@ -16,7 +18,17 @@ export class AuthService {
       throw new UnauthorizedException('Usuario o contraseña incorrectos');
     }
     const token = await this.jwt.signAsync({ sub: u.id, usuario: u.usuario, nombre: u.nombre, rol: u.rol });
-    return { token, usuario: { id: u.id, usuario: u.usuario, nombre: u.nombre, rol: u.rol } };
+    return { token, usuario: await this.yo(u.id) };
+  }
+
+  async yo(id: number) {
+    const u = await this.prisma.usuario.findUnique({
+      where: { id },
+      select: { id: true, usuario: true, nombre: true, rol: true, activo: true, perfil: { select: { id: true, nombre: true } } },
+    });
+    if (!u || !u.activo) throw new UnauthorizedException('Tu usuario está desactivado');
+    const { activo: _a, ...datos } = u;
+    return { ...datos, permisos: await this.permisos.efectivos(id) };
   }
 
   /**
@@ -25,7 +37,8 @@ export class AuthService {
    * Devuelve el id del administrador que autoriza.
    */
   async autorizarAdmin(solicitante: { id: number; rol: string }, autorizacion?: { usuario: string; password: string }) {
-    if (solicitante.rol === 'ADMIN') return solicitante.id;
+    const yo = await this.prisma.usuario.findUnique({ where: { id: solicitante.id }, select: { rol: true, activo: true } });
+    if (yo?.activo && yo.rol === 'ADMIN') return solicitante.id;
     if (!autorizacion?.usuario || !autorizacion.password) {
       throw new ForbiddenException('Necesita la autorización de un administrador');
     }

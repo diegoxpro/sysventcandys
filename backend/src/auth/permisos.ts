@@ -24,8 +24,7 @@ export const PERMISOS = {
   'productos.editar': { grupo: 'Almacén', nombre: 'Crear y editar productos y precios' },
   'productos.importar': { grupo: 'Almacén', nombre: 'Importar productos desde Excel' },
   'stock.ajustar': { grupo: 'Almacén', nombre: 'Registrar mermas y ajustes de stock' },
-  'inventario.contar': { grupo: 'Almacén', nombre: 'Contar inventario' },
-  'inventario.validar': { grupo: 'Almacén', nombre: 'Validar y cerrar inventario' },
+  'inventario.realizar': { grupo: 'Almacén', nombre: 'Realizar inventario (contar, validar y cerrar)' },
   // Reportes
   'reportes.ventas': { grupo: 'Reportes', nombre: 'Reporte de venta' },
   'reportes.compras': { grupo: 'Reportes', nombre: 'Reporte de compra' },
@@ -33,7 +32,8 @@ export const PERMISOS = {
   'reportes.sunat': { grupo: 'Reportes', nombre: 'Boletas SUNAT' },
   // Configuración
   'config.preferencias': { grupo: 'Configuración', nombre: 'Preferencias y datos de la tienda' },
-  'config.usuarios': { grupo: 'Configuración', nombre: 'Usuarios, roles y permisos' },
+  // Solo el administrador; no se puede dar a otros.
+  'config.usuarios': { grupo: 'Configuración', nombre: 'Usuarios, roles y permisos', soloAdmin: true },
   'config.series': { grupo: 'Configuración', nombre: 'Series de comprobantes' },
   'config.sunat': { grupo: 'Configuración', nombre: 'Conexión con SUNAT' },
   'config.backup': { grupo: 'Configuración', nombre: 'Copias de seguridad' },
@@ -44,11 +44,21 @@ export type ClavePermiso = keyof typeof PERMISOS;
 
 export const TODOS_LOS_PERMISOS = Object.keys(PERMISOS) as ClavePermiso[];
 
-/** Lo que hoy puede hacer el cajero; es el punto de partida del rol Cajero. */
+/** Permisos que se pueden poner en un rol o dar a un usuario. */
+export const PERMISOS_ASIGNABLES = TODOS_LOS_PERMISOS.filter((p) => !('soloAdmin' in PERMISOS[p]));
+
+/**
+ * Lo que hacía el cajero antes de los roles; es el punto de partida del rol
+ * Cajero (debe coincidir con la migración roles_permisos). Descuento, editar y
+ * anular siguen pidiendo la clave de un administrador.
+ */
 export const PERMISOS_CAJERO: ClavePermiso[] = [
   'ventas.vender',
   'ventas.caja',
   'ventas.ver',
+  'ventas.descuento',
+  'ventas.editar',
+  'ventas.anular',
   'clientes.editar',
   'compras.ver',
 ];

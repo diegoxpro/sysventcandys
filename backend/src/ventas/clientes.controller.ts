@@ -64,6 +64,7 @@ export class ClientesController {
     return this.prisma.cliente.findUniqueOrThrow({ where: { id } });
   }
 
+  @Permiso('clientes.editar')
   @Post()
   async crear(@Body() dto: ClienteDto) {
     const data = this.datos(dto);
@@ -75,6 +76,7 @@ export class ClientesController {
     return this.prisma.cliente.create({ data });
   }
 
+  @Permiso('clientes.editar')
   @Patch(':id')
   async editar(@Param('id', ParseIntPipe) id: number, @Body() dto: ClienteDto) {
     const data = this.datos(dto);
