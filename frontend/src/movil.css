@@ -63,3 +63,10 @@
 .mv-escaner-botones { display: flex; gap: 8px; }
 .mv-escaner-botones:empty { display: none; }
 .mv-escaner-botones .mv-btn { flex: 1; min-height: 46px; }
+
+/* Conteo desde la PC (cajera o administrador), dentro del panel. */
+.mv.mv-pc { min-height: 0; background: transparent; border-radius: 12px; overflow: hidden; border: 1px solid var(--border, #ddd); }
+.mv.mv-pc .mv-head { position: static; }
+.mv.mv-pc .mv-main { max-width: 640px; margin: 0; }
+.mv-lector { display: flex; flex-direction: column; gap: 10px; background: var(--surface, #fff); border: 1px solid var(--border, #ddd); border-radius: 12px; padding: 14px; }
+.mv.mv-pc .mv-toast { left: auto; right: 24px; width: min(420px, calc(100% - 48px)); }

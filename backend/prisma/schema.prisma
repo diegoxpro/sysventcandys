@@ -79,6 +79,7 @@ model Usuario {
   ventasAutorizadas Venta[]           @relation("VentaAutorizador")
   cajasAbiertas     Caja[]            @relation("CajaApertura")
   inventarios       Inventario[]
+  operadoresInventario InventarioOperador[]
   cajasCerradas     Caja[]            @relation("CajaCierre")
   movimientosCaja   MovimientoCaja[]
 }
@@ -652,11 +653,16 @@ model InventarioOperador {
   nombre       String
   // Lo guarda el celular para retomar si se cierra o se apaga.
   token        String   @unique
+  // Usuario del sistema cuando cuenta desde la PC (cajera o admin); null = celular.
+  usuarioId    Int?
   createdAt    DateTime @default(now())
   ultimoAcceso DateTime @default(now())
 
   inventario Inventario         @relation(fields: [inventarioId], references: [id])
+  usuario    Usuario?           @relation(fields: [usuarioId], references: [id])
   conteos    InventarioConteo[]
+
+  @@index([inventarioId, usuarioId])
 }
 
 // Resultado por producto: lo que se tomará al validar.

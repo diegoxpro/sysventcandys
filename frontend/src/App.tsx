@@ -21,6 +21,8 @@ import Ventas from './pages/Ventas';
 
 // Solo la cargan los celulares (trae el lector de códigos de barras).
 const MovilInventario = lazy(() => import('./pages/MovilInventario'));
+// La cajera solo cuenta (con el lector de la caja); el panel completo es del admin.
+const ContarInventarioPc = lazy(() => import('./pages/ContarInventarioPc'));
 
 export default function App() {
   const { usuario, listo, esAdmin } = useAuth();
@@ -54,7 +56,7 @@ export default function App() {
         )}
         <Route path="productos" element={<Productos />} />
         <Route path="inventario" element={<Inventario />} />
-        {esAdmin && <Route path="inventario/realizar" element={<RealizarInventario />} />}
+        <Route path="inventario/realizar" element={esAdmin ? <RealizarInventario /> : <Suspense fallback={null}><ContarInventarioPc /></Suspense>} />
         <Route path="compras" element={<Compras />} />
         {esAdmin && <Route path="compras/nueva" element={<NuevaCompra />} />}
         <Route path="compras/:id" element={<CompraDetalle />} />

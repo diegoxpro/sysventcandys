@@ -130,30 +130,43 @@ export default function MovilInventario() {
     const o = leer<Operador | null>(CLAVE_OP, null);
     return o && (!qr || o.qr === qr) ? o : null;
   });
-  const [sesion, setSesion] = useState<Sesion | null>(null);
   const [error, setError] = useState('');
+  const salir = useCallback(() => {
+    guardar(CLAVE_OP, null);
+    setOp(null);
+  }, []);
+
+  if (!op) return <Entrar qr={qr} alEntrar={(o) => (guardar(CLAVE_OP, o), setOp(o))} error={error} setError={setError} />;
+  return <Contador key={op.token} op={op} claveCola={CLAVE_COLA} alSalir={salir} />;
+}
+
+/**
+ * Pantalla de conteo. La usan el celular (entra con el QR) y la PC (la cajera
+ * o el administrador con su usuario; ahí se cuenta con el lector de códigos USB).
+ * Lo aceptado se guarda primero en `claveCola` y luego se envía.
+ */
+export function Contador({ op, claveCola, alSalir, enPc = false }: { op: Pick<Operador, 'token' | 'nombre'>; claveCola: string; alSalir: () => void; enPc?: boolean }) {
+  const [sesion, setSesion] = useState<Sesion | null>(null);
   const [sinSenal, setSinSenal] = useState(false);
-  const [cola, setCola] = useState<ConteoLocal[]>(() => leer(CLAVE_COLA, []));
+  const [cola, setCola] = useState<ConteoLocal[]>(() => leer(claveCola, []));
   const [pantalla, setPantalla] = useState<'inicio' | 'escanear' | 'buscar'>('inicio');
   const [hallado, setHallado] = useState<Hallado | null>(null);
   const [aviso, setAviso] = useState('');
+  const [codigo, setCodigo] = useState('');
+  const lector = useRef<HTMLInputElement>(null);
   const enviando = useRef(false);
-  const ultimoModo = useRef<'escanear' | 'buscar'>('escanear');
+  const ultimoModo = useRef<'escanear' | 'buscar' | 'lector'>(enPc ? 'lector' : 'escanear');
   const colaRef = useRef(cola);
   colaRef.current = cola;
 
   const actualizarCola = (fn: (c: ConteoLocal[]) => ConteoLocal[]) => {
     const n = fn(colaRef.current);
     colaRef.current = n;
-    guardar(CLAVE_COLA, n);
+    guardar(claveCola, n);
     setCola(n);
   };
 
-  const salir = useCallback(() => {
-    guardar(CLAVE_OP, null);
-    setOp(null);
-    setSesion(null);
-  }, []);
+  const salir = alSalir;
 
   const cargarSesion = useCallback(async () => {
     if (!op) return;
@@ -220,13 +233,16 @@ export default function MovilInventario() {
     return () => clearTimeout(t);
   }, [aviso]);
 
-  if (!op) return <Entrar qr={qr} alEntrar={(o) => (guardar(CLAVE_OP, o), setOp(o))} error={error} setError={setError} />;
+  // En la PC el cursor vuelve al campo del lector para escanear seguido.
+  useEffect(() => {
+    if (enPc && pantalla === 'inicio' && !hallado) lector.current?.focus();
+  }, [enPc, pantalla, hallado]);
 
   const abierto = !sesion || sesion.inventario.estado === 'EN_CURSO';
   const sinEnviar = cola.filter((c) => !c.error);
   const rechazados = cola.filter((c) => c.error);
 
-  const elegir = async (buscar: () => Promise<Hallado>, desde: 'escanear' | 'buscar') => {
+  const elegir = async (buscar: () => Promise<Hallado>, desde: 'escanear' | 'buscar' | 'lector') => {
     ultimoModo.current = desde;
     try {
       setHallado(await buscar());
@@ -234,7 +250,7 @@ export default function MovilInventario() {
     } catch (e) {
       setPantalla('inicio');
       if (e instanceof ErrorApi && e.status === 404) setAviso(e.message);
-      else setAviso('Sin conexión con la PC. Acércate al WiFi e intenta de nuevo.');
+      else setAviso(enPc ? 'No se pudo conectar con el sistema. Intenta de nuevo.' : 'Sin conexión con la PC. Acércate al WiFi e intenta de nuevo.');
     }
   };
 
@@ -249,16 +265,22 @@ export default function MovilInventario() {
   };
 
   return (
-    <div className="mv">
+    <div className={enPc ? 'mv mv-pc' : 'mv'}>
       <header className="mv-head">
         <div>
           <b>Inventario {sesion ? `#${sesion.inventario.id}` : ''}</b>
           <span>{op.nombre} · {sesion?.total ?? 0} contados</span>
         </div>
-        <button className="mv-link" onClick={() => confirm('¿Salir de este inventario en este celular?') && salir()}>Salir</button>
+        {!enPc && <button className="mv-link" onClick={() => confirm('¿Salir de este inventario en este celular?') && salir()}>Salir</button>}
       </header>
 
-      {sinSenal && <div className="mv-banda warn">Sin conexión con la PC. Lo que cuentes se guarda en el celular y se envía al volver la señal.</div>}
+      {sinSenal && (
+        <div className="mv-banda warn">
+          {enPc
+            ? 'Sin conexión con el sistema. Lo que cuentes se guarda en esta PC y se envía al volver.'
+            : 'Sin conexión con la PC. Lo que cuentes se guarda en el celular y se envía al volver la señal.'}
+        </div>
+      )}
       {!abierto && (
         <div className="mv-banda info">
           {sesion?.inventario.estado === 'REVISION'
@@ -280,15 +302,34 @@ export default function MovilInventario() {
 
       {pantalla === 'inicio' && (
         <main className="mv-main">
+          {enPc ? (
+            <form
+              className="mv-lector"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const c = codigo.trim();
+                if (!c) return;
+                setCodigo('');
+                elegir(() => llamar<Hallado>(`/codigo/${encodeURIComponent(c)}`, op.token), 'lector');
+              }}
+            >
+              <label className="mv-campo">
+                Escanea con el lector o escribe el código y presiona Enter
+                <input ref={lector} value={codigo} onChange={(e) => setCodigo(e.target.value)} disabled={!abierto} inputMode="numeric" autoComplete="off" placeholder="Código de barras" />
+              </label>
+              <button className="mv-btn verde" disabled={!abierto || !codigo.trim()}>Buscar código</button>
+            </form>
+          ) : (
           <button className="mv-btn verde grande" disabled={!abierto} onClick={() => setPantalla('escanear')}>
             <svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path d="M3 7V4h3M18 4h3v3M21 17v3h-3M6 20H3v-3M7 8v8M10 8v8M13 8v8M16 8v8" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
             Escanear código
           </button>
+          )}
           <button className="mv-btn" disabled={!abierto} onClick={() => setPantalla('buscar')}>Buscar por nombre (sin código)</button>
 
           {(sinEnviar.length > 0 || rechazados.length > 0) && (
             <section className="mv-lista">
-              <h3>En el celular</h3>
+              <h3>{enPc ? 'En esta PC' : 'En el celular'}</h3>
               {sinEnviar.map((c) => (
                 <div key={c.clienteId} className="mv-fila">
                   <span className="grow">{c.producto}</span><b>{c.cantidad}</b><span className="mv-chip warn">Sin enviar</span>

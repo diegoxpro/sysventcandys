@@ -219,6 +219,22 @@ export class TomaInventarioService {
     return this.prisma.inventarioOperador.create({ data: { inventarioId: inv.id, nombre: nombre.trim(), token: token() } });
   }
 
+  /**
+   * Conteo desde la PC (cajera o administrador): cada usuario es un operador
+   * más del inventario en curso, con su propio token, sin escanear el QR.
+   */
+  async operadorPc(usuarioId: number, nombre: string) {
+    const inv = await this.prisma.inventario.findFirst({ where: { estado: { in: ACTIVOS } }, orderBy: { id: 'desc' } });
+    if (!inv) return { inventario: null, operador: null };
+    let op = await this.prisma.inventarioOperador.findFirst({ where: { inventarioId: inv.id, usuarioId }, orderBy: { id: 'asc' } });
+    if (!op && inv.estado === EstadoInventario.EN_CURSO) {
+      op = await this.prisma.inventarioOperador.create({
+        data: { inventarioId: inv.id, usuarioId, nombre: `${nombre.trim().slice(0, 30)} (PC)`, token: token() },
+      });
+    }
+    return { inventario: { id: inv.id, estado: inv.estado }, operador: op ? { token: op.token, nombre: op.nombre } : null };
+  }
+
   async operador(tokenOperador?: string) {
     if (!tokenOperador) throw new UnauthorizedException('Escanea el QR de la PC para entrar');
     const op = await this.prisma.inventarioOperador.findUnique({ where: { token: tokenOperador }, include: { inventario: true } });
