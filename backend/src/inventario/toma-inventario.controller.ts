@@ -39,7 +39,7 @@ class ConteoDto {
   @IsOptional() @IsArray() @ArrayMaxSize(30) @ValidateNested({ each: true }) @Type(() => LoteDto) lotes?: LoteDto[];
 }
 
-/** Pantalla "Realizar inventario" de la PC (solo administrador). */
+/** Pantalla "Realizar inventario" de la PC (solo administrador, salvo contar-pc). */
 @Roles(Rol.ADMIN)
 @Controller('toma-inventario')
 export class TomaInventarioController {
@@ -49,6 +49,13 @@ export class TomaInventarioController {
   async actual() {
     const inv = await this.svc.actual();
     return { inventario: inv ? { ...inv, qr: urlEntrada(`/i/${inv.token}`) } : null };
+  }
+
+  /** La cajera (o el admin) cuenta desde la PC como un operador más. */
+  @Roles(Rol.ADMIN, Rol.CAJERO)
+  @Post('contar-pc')
+  contarPc(@UsuarioActual() user: UsuarioSesion) {
+    return this.svc.operadorPc(user.id, user.nombre);
   }
 
   @Get('historial')

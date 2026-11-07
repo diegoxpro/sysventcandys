@@ -1,9 +1,12 @@
 import QRCode from 'qrcode';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api';
 import { Icono } from '../components/icons';
 import { Campo, Modal, useCarga, useToast, Vacio } from '../components/ui';
 import { fechaHora, money, n, qty } from '../format';
+
+// El conteo desde la PC trae el lector de códigos: se carga solo al abrir la pestaña.
+const ContarDesdePc = lazy(() => import('./ContarInventarioPc').then((m) => ({ default: m.ContarDesdePc })));
 
 type EstadoInv = 'EN_CURSO' | 'REVISION' | 'VALIDADO' | 'CANCELADO';
 type EstadoConteo = 'APLICADO' | 'PENDIENTE' | 'SUMADO' | 'REEMPLAZADO' | 'DESCARTADO';
@@ -117,7 +120,7 @@ function Inicio() {
       <div className="card card-pad">
         <ol className="inv-pasos">
           <li>Da clic en <b>Iniciar</b>. Aparece un código QR.</li>
-          <li>Cada operador escanea el QR con su celular (conectado al WiFi de la tienda) y escribe su nombre. La primera vez, el celular pide instalar el certificado de la tienda.</li>
+          <li>Cada operador escanea el QR con su celular (conectado al WiFi de la tienda) y escribe su nombre. La primera vez, el celular pide instalar el certificado de la tienda. La cajera también puede contar desde la caja con el lector de códigos (menú <b>Realizar inventario</b>).</li>
           <li>En el celular: <b>Escanear</b>, apunta al código de barras y escribe la cantidad en unidades. Los productos sin código se buscan por nombre.</li>
           <li>Los conteos aparecen aquí al instante. Si dos personas cuentan el mismo producto, el sistema te pregunta si se suman o se reemplazan.</li>
           <li>Al terminar, da clic en <b>Finalizar conteo</b>, revisa las diferencias y los productos no contados, y da clic en <b>Validar</b> para actualizar el stock.</li>
@@ -156,7 +159,7 @@ function EnCurso({ id, qr, alTerminar }: { id: number; qr: string; alTerminar: (
   const avisar = useToast();
   const { data, recargar, setData } = useCarga(() => api<Detalle>(`/toma-inventario/${id}`), [id]);
   const version = useRef('');
-  const [tab, setTab] = useState<'contados' | 'no-contados' | 'operadores'>('contados');
+  const [tab, setTab] = useState<'contados' | 'no-contados' | 'operadores' | 'contar'>('contados');
   const [filtro, setFiltro] = useState('');
   const [editar, setEditar] = useState<Item | null>(null);
   const [validar, setValidar] = useState(false);
@@ -300,7 +303,10 @@ function EnCurso({ id, qr, alTerminar }: { id: number; qr: string; alTerminar: (
         <button className={tab === 'contados' ? 'active' : ''} onClick={() => setTab('contados')}>Contados ({data.items.length})</button>
         <button className={tab === 'no-contados' ? 'active' : ''} onClick={() => setTab('no-contados')}>No contados ({Math.max(0, data.totalProductos - data.items.length)})</button>
         <button className={tab === 'operadores' ? 'active' : ''} onClick={() => setTab('operadores')}>Operadores ({data.operadores.length})</button>
+        <button className={tab === 'contar' ? 'active' : ''} onClick={() => setTab('contar')}>Contar desde esta PC</button>
       </div>
+
+      {tab === 'contar' && <Suspense fallback={null}><ContarDesdePc /></Suspense>}
 
       {tab === 'contados' && (
         <div className="card">
