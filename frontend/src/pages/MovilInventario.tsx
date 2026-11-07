@@ -26,6 +26,8 @@ interface ConteoLocal {
   productoId: number;
   producto: string;
   cantidad: number;
+  lotes?: Lote[];
+  /** Versión anterior (una sola fecha): se convierte al enviar. */
   fechaVencimiento?: string;
   creado: number;
   error?: string;
@@ -52,13 +54,20 @@ interface ProductoMovil {
   nombre: string;
   codigoBarra: string | null;
   unidad: string;
+  stock: string;
   controlaVencimiento: boolean;
   contado?: boolean;
+}
+
+interface Lote {
+  fecha: string;
+  cantidad: number;
 }
 
 interface Hallado {
   producto: ProductoMovil;
   presentacion: { nombre: string; factor: string } | null;
+  lotesSistema: Lote[];
   yaContado: { cantidad: string; conteos: { operador: string; cantidad: string; estado: string; fecha: string }[] } | null;
 }
 
@@ -164,7 +173,12 @@ export default function MovilInventario() {
     try {
       for (const c of [...colaRef.current]) {
         try {
-          await llamar('/conteos', op.token, { clienteId: c.clienteId, productoId: c.productoId, cantidad: c.cantidad, fechaVencimiento: c.fechaVencimiento });
+          await llamar('/conteos', op.token, {
+            clienteId: c.clienteId,
+            productoId: c.productoId,
+            cantidad: c.cantidad,
+            lotes: c.lotes ?? (c.fechaVencimiento ? [{ fecha: c.fechaVencimiento, cantidad: c.cantidad }] : []),
+          });
           actualizarCola((q) => q.filter((x) => x.clienteId !== c.clienteId));
           setSinSenal(false);
         } catch (e) {
@@ -224,9 +238,9 @@ export default function MovilInventario() {
     }
   };
 
-  const aceptar = (cantidad: number, fechaVencimiento?: string) => {
+  const aceptar = (cantidad: number, lotes: Lote[]) => {
     const h = hallado!;
-    actualizarCola((q) => [...q, { clienteId: nuevoId(), productoId: h.producto.id, producto: h.producto.nombre, cantidad, fechaVencimiento, creado: Date.now() }]);
+    actualizarCola((q) => [...q, { clienteId: nuevoId(), productoId: h.producto.id, producto: h.producto.nombre, cantidad, lotes, creado: Date.now() }]);
     setHallado(null);
     setAviso(`✓ ${h.producto.nombre}: ${cantidad}`);
     setTimeout(enviarCola, 0);
@@ -456,14 +470,44 @@ function Buscar({ token, onElegir, onCerrar }: { token: string; onElegir: (p: Pr
   );
 }
 
-function Cantidad({ hallado, onCancelar, onAceptar }: { hallado: Hallado; onCancelar: () => void; onAceptar: (c: number, v?: string) => void }) {
-  const { producto, presentacion, yaContado } = hallado;
+interface Fila {
+  id: number;
+  fecha: string;
+  cantidad: string;
+}
+
+const numero = (v: string) => Number(v.replace(',', '.'));
+const fechaCorta = (f: string) => f.split('-').reverse().join('/');
+let siguienteFila = 1;
+const fila = (fecha = '', cantidad = ''): Fila => ({ id: siguienteFila++, fecha, cantidad });
+
+/**
+ * Cantidad del producto. Con vencimiento se cuenta por fecha: aparecen los
+ * lotes que el sistema conoce (fecha y cantidad) para corregirlos, se pueden
+ * agregar otras fechas y el total es la suma.
+ */
+function Cantidad({ hallado, onCancelar, onAceptar }: { hallado: Hallado; onCancelar: () => void; onAceptar: (c: number, lotes: Lote[]) => void }) {
+  const { producto, presentacion, yaContado, lotesSistema } = hallado;
+  const obligatorio = producto.controlaVencimiento;
+  const [porFecha, setPorFecha] = useState(obligatorio || lotesSistema.length > 0);
   const [cantidad, setCantidad] = useState('');
-  const [conVence, setConVence] = useState(producto.controlaVencimiento);
-  const [vence, setVence] = useState('');
-  const valor = Number(cantidad.replace(',', '.'));
-  const valido = cantidad.trim() !== '' && Number.isFinite(valor) && valor >= 0 && (!conVence || !!vence);
-  const sumar = (d: number) => setCantidad(String(Math.max(0, (Number(cantidad.replace(',', '.')) || 0) + d)));
+  const [filas, setFilas] = useState<Fila[]>(() =>
+    lotesSistema.length ? lotesSistema.map((l) => fila(l.fecha, String(l.cantidad))) : [fila()],
+  );
+
+  const enUso = filas.filter((f) => f.fecha || f.cantidad.trim());
+  const totalFilas = Math.round(enUso.reduce((s, f) => s + (numero(f.cantidad) || 0), 0) * 1000) / 1000;
+  const filasOk = enUso.every((f) => f.cantidad.trim() !== '' && Number.isFinite(numero(f.cantidad)) && numero(f.cantidad) >= 0 && (!!f.fecha || numero(f.cantidad) === 0));
+  const valor = porFecha ? totalFilas : numero(cantidad);
+  const valido = porFecha ? filasOk : cantidad.trim() !== '' && Number.isFinite(valor) && valor >= 0;
+  const cambiar = (id: number, campo: 'fecha' | 'cantidad', v: string) =>
+    setFilas((fs) => fs.map((f) => (f.id === id ? { ...f, [campo]: campo === 'cantidad' ? v.replace(/[^\d.,]/g, '') : v } : f)));
+  const sumar = (d: number) => setCantidad(String(Math.max(0, (numero(cantidad) || 0) + d)));
+  const activarFechas = (si: boolean) => {
+    setPorFecha(si);
+    // Al pasar a fechas, lo ya escrito queda en la primera fila.
+    if (si && cantidad && !lotesSistema.length) setFilas([fila('', cantidad)]);
+  };
 
   return (
     <div className="mv-hoja" role="dialog" aria-modal="true" aria-labelledby="mv-prod">
@@ -471,11 +515,15 @@ function Cantidad({ hallado, onCancelar, onAceptar }: { hallado: Hallado; onCanc
         className="mv-hoja-caja"
         onSubmit={(e) => {
           e.preventDefault();
-          if (valido) onAceptar(valor, conVence ? vence : undefined);
+          if (!valido) return;
+          const lotes = porFecha ? enUso.filter((f) => numero(f.cantidad) > 0).map((f) => ({ fecha: f.fecha, cantidad: numero(f.cantidad) })) : [];
+          onAceptar(valor, lotes);
         }}
       >
         <h2 id="mv-prod">{producto.nombre}</h2>
-        <p className="mv-sub">{producto.codigoBarra ?? 'Sin código'} · se cuenta en {producto.unidad}</p>
+        <p className="mv-sub">
+          {producto.codigoBarra ?? 'Sin código'} · se cuenta en {producto.unidad} · en sistema: <b>{Number(producto.stock)}</b>
+        </p>
         {presentacion && (
           <div className="mv-banda info">
             Escaneaste la presentación <b>{presentacion.nombre}</b> (x{Number(presentacion.factor)}). Escribe el total en <b>unidades</b>.
@@ -486,26 +534,44 @@ function Cantidad({ hallado, onCancelar, onAceptar }: { hallado: Hallado; onCanc
             Ya fue contado: {yaContado.conteos.map((c) => `${c.operador} ${Number(c.cantidad)} (${hora(c.fecha)})`).join(', ')}. Si lo registras, la PC decidirá si se suma o reemplaza.
           </div>
         )}
-        <label className="mv-campo">
-          Cantidad en unidades
-          <div className="mv-cant">
-            <button type="button" className="mv-btn" onClick={() => sumar(-1)} aria-label="Restar uno">−</button>
-            <input inputMode="decimal" autoFocus value={cantidad} onChange={(e) => setCantidad(e.target.value.replace(/[^\d.,]/g, ''))} placeholder="0" />
-            <button type="button" className="mv-btn" onClick={() => sumar(1)} aria-label="Sumar uno">+</button>
-          </div>
-        </label>
-        <label className="mv-check">
-          <input type="checkbox" checked={conVence} onChange={(e) => setConVence(e.target.checked)} /> Registrar fecha de vencimiento
-        </label>
-        {conVence && (
+
+        {porFecha ? (
+          <>
+            <div className="mv-lotes">
+              <div className="mv-lotes-cab"><span>Vence el</span><span>Cantidad</span><span /></div>
+              {filas.map((f) => (
+                <div key={f.id} className="mv-lote">
+                  <input type="date" value={f.fecha} onChange={(e) => cambiar(f.id, 'fecha', e.target.value)} aria-label="Fecha de vencimiento" />
+                  <input inputMode="decimal" value={f.cantidad} onChange={(e) => cambiar(f.id, 'cantidad', e.target.value)} placeholder="0" aria-label="Cantidad de esa fecha" />
+                  <button type="button" className="mv-link" onClick={() => setFilas((fs) => (fs.length > 1 ? fs.filter((x) => x.id !== f.id) : [fila()]))} aria-label="Quitar esta fecha">✕</button>
+                </div>
+              ))}
+              <button type="button" className="mv-btn" onClick={() => setFilas((fs) => [...fs, fila()])}>+ Agregar otra fecha</button>
+            </div>
+            {lotesSistema.length > 0 && (
+              <p className="mv-sub">El sistema tenía: {lotesSistema.map((l) => `${fechaCorta(l.fecha)} → ${l.cantidad}`).join(' · ')}. Corrige lo que no coincida y pon 0 en la fecha que ya no está.</p>
+            )}
+            <div className="mv-total"><span>Total</span><b>{totalFilas}</b></div>
+            {!filasOk && <p className="mv-error">Cada cantidad necesita su fecha de vencimiento.</p>}
+          </>
+        ) : (
           <label className="mv-campo">
-            Vence el
-            <input type="date" value={vence} onChange={(e) => setVence(e.target.value)} />
+            Cantidad en unidades
+            <div className="mv-cant">
+              <button type="button" className="mv-btn" onClick={() => sumar(-1)} aria-label="Restar uno">−</button>
+              <input inputMode="decimal" autoFocus value={cantidad} onChange={(e) => setCantidad(e.target.value.replace(/[^\d.,]/g, ''))} placeholder="0" />
+              <button type="button" className="mv-btn" onClick={() => sumar(1)} aria-label="Sumar uno">+</button>
+            </div>
+          </label>
+        )}
+        {!obligatorio && (
+          <label className="mv-check">
+            <input type="checkbox" checked={porFecha} onChange={(e) => activarFechas(e.target.checked)} /> Registrar fechas de vencimiento
           </label>
         )}
         <div className="mv-acciones">
           <button type="button" className="mv-btn" onClick={onCancelar}>Cancelar</button>
-          <button className="mv-btn verde" disabled={!valido}>Aceptar</button>
+          <button className="mv-btn verde" disabled={!valido}>Aceptar{porFecha ? ` (${totalFilas})` : ''}</button>
         </div>
       </form>
     </div>

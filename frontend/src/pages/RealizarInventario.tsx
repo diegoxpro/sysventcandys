@@ -3,16 +3,25 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api';
 import { Icono } from '../components/icons';
 import { Campo, Modal, useCarga, useToast, Vacio } from '../components/ui';
-import { fecha, fechaHora, money, n, qty } from '../format';
+import { fechaHora, money, n, qty } from '../format';
 
 type EstadoInv = 'EN_CURSO' | 'REVISION' | 'VALIDADO' | 'CANCELADO';
 type EstadoConteo = 'APLICADO' | 'PENDIENTE' | 'SUMADO' | 'REEMPLAZADO' | 'DESCARTADO';
+
+interface Lote {
+  fecha: string;
+  cantidad: number;
+}
+
+const fechaCorta = (f: string) => f.split('-').reverse().join('/');
+/** "15/12/2026: 10 · 20/01/2027: 6" */
+const textoLotes = (lotes: Lote[]) => lotes.map((l) => `${fechaCorta(l.fecha)}: ${qty(l.cantidad)}`).join(' · ');
 
 interface Conteo {
   id: number;
   cantidad: string;
   stockAlContar: string;
-  fechaVencimiento: string | null;
+  lotes: Lote[];
   estado: EstadoConteo;
   fecha: string;
   operador: { nombre: string };
@@ -22,9 +31,9 @@ interface Item {
   id: number;
   cantidad: string;
   stockReferencia: string;
-  fechaVencimiento: string | null;
+  lotes: Lote[];
   actualizado: string;
-  producto: { id: number; nombre: string; codigoBarra: string | null; unidad: string; stock: string; costo: string };
+  producto: { id: number; nombre: string; codigoBarra: string | null; unidad: string; stock: string; costo: string; controlaVencimiento: boolean };
   conteos: Conteo[];
 }
 
@@ -265,8 +274,13 @@ function EnCurso({ id, qr, alTerminar }: { id: number; qr: string; alTerminar: (
                       <div className="muted">
                         {item.conteos.filter((c) => c.estado !== 'PENDIENTE' && c.estado !== 'DESCARTADO').map((c) => c.operador.nombre).join(', ')}
                       </div>
+                      {item.lotes.length > 0 && <div className="small">{textoLotes(item.lotes)}</div>}
                     </td>
-                    <td><b>{qty(conteo.cantidad)}</b><div className="muted">{conteo.operador.nombre} · {fechaHora(conteo.fecha)}</div></td>
+                    <td>
+                      <b>{qty(conteo.cantidad)}</b>
+                      <div className="muted">{conteo.operador.nombre} · {fechaHora(conteo.fecha)}</div>
+                      {conteo.lotes.length > 0 && <div className="small">{textoLotes(conteo.lotes)}</div>}
+                    </td>
                     <td className="actions">
                       <div className="row tight" style={{ justifyContent: 'flex-end' }}>
                         <Resolver conteoId={conteo.id} accion="SUMAR" texto={`Sumar = ${qty(n(item.cantidad) + n(conteo.cantidad))}`} alListo={recargar} />
@@ -300,7 +314,7 @@ function EnCurso({ id, qr, alTerminar }: { id: number; qr: string; alTerminar: (
                 <thead>
                   <tr>
                     <th>Producto</th><th className="num">Stock al contar</th><th className="num">Contado</th><th className="num">Diferencia</th>
-                    <th>Vence</th><th>Contado por</th><th>Hora</th><th />
+                    <th>Vencimientos</th><th>Contado por</th><th>Hora</th><th />
                   </tr>
                 </thead>
                 <tbody>
@@ -313,7 +327,9 @@ function EnCurso({ id, qr, alTerminar }: { id: number; qr: string; alTerminar: (
                         <td className="num">{qty(it.stockReferencia)}</td>
                         <td className="num"><b>{qty(it.cantidad)}</b></td>
                         <td className={`num ${d > 0.0005 ? 'texto-ok' : d < -0.0005 ? 'texto-danger' : 'muted'}`}>{d > 0 ? '+' : ''}{qty(d)}</td>
-                        <td>{it.fechaVencimiento ? fecha(it.fechaVencimiento) : '—'}</td>
+                        <td className="small">
+                          {it.lotes.length ? textoLotes(it.lotes) : it.producto.controlaVencimiento ? <span className="texto-danger">Sin fechas</span> : '—'}
+                        </td>
                         <td>{[...new Set(it.conteos.filter((c) => c.estado !== 'DESCARTADO').map((c) => c.operador.nombre))].join(', ')}</td>
                         <td>{fechaHora(it.actualizado)}</td>
                         <td className="actions"><button className="btn btn-sm" onClick={() => setEditar(it)}>Corregir</button></td>
@@ -462,10 +478,16 @@ function NoContados({ id, version }: { id: number; version: number }) {
 function EditarItem({ item, onClose, alGuardar }: { item: Item; onClose: () => void; alGuardar: () => void }) {
   const avisar = useToast();
   const [cantidad, setCantidad] = useState(String(n(item.cantidad)));
-  const [vence, setVence] = useState(item.fechaVencimiento?.slice(0, 10) ?? '');
+  const [lotes, setLotes] = useState(() => item.lotes.map((l) => ({ fecha: l.fecha, cantidad: String(l.cantidad) })));
+  const porFecha = lotes.length > 0 || item.producto.controlaVencimiento;
+  const total = Math.round(lotes.reduce((s, l) => s + (Number(l.cantidad) || 0), 0) * 1000) / 1000;
+  const filasOk = lotes.every((l) => l.fecha && l.cantidad !== '' && Number(l.cantidad) >= 0);
+  const valido = porFecha ? filasOk : cantidad !== '' && Number(cantidad) >= 0;
+  const cambiar = (i: number, campo: 'fecha' | 'cantidad', v: string) => setLotes((ls) => ls.map((l, j) => (j === i ? { ...l, [campo]: v } : l)));
   const guardar = async () => {
     try {
-      await api(`/toma-inventario/items/${item.id}`, { method: 'PATCH', body: { cantidad: Number(cantidad), fechaVencimiento: vence || null } });
+      const detalle = lotes.filter((l) => Number(l.cantidad) > 0).map((l) => ({ fecha: l.fecha, cantidad: Number(l.cantidad) }));
+      await api(`/toma-inventario/items/${item.id}`, { method: 'PATCH', body: { cantidad: porFecha ? total : Number(cantidad), lotes: porFecha ? detalle : [] } });
       alGuardar();
     } catch (e) {
       avisar((e as Error).message, true);
@@ -475,16 +497,43 @@ function EditarItem({ item, onClose, alGuardar }: { item: Item; onClose: () => v
     <Modal
       titulo={`Corregir: ${item.producto.nombre}`}
       onClose={onClose}
-      pie={<><button className="btn" onClick={onClose}>Cancelar</button><button className="btn btn-primary" onClick={guardar} disabled={cantidad === '' || Number(cantidad) < 0}>Guardar</button></>}
+      pie={<><button className="btn" onClick={onClose}>Cancelar</button><button className="btn btn-primary" onClick={guardar} disabled={!valido}>Guardar</button></>}
     >
       <div className="stack">
-        <Campo label={`Cantidad contada (${item.producto.unidad})`}>
-          <input className="num" type="number" min={0} step="any" value={cantidad} onChange={(e) => setCantidad(e.target.value)} autoFocus />
-        </Campo>
-        <Campo label="Fecha de vencimiento (opcional)">
-          <input type="date" value={vence} onChange={(e) => setVence(e.target.value)} />
-        </Campo>
-        <div className="muted">Conteos recibidos: {item.conteos.map((c) => `${c.operador.nombre} ${qty(c.cantidad)}`).join(' · ')}</div>
+        {porFecha ? (
+          <>
+            <table>
+              <thead><tr><th>Vence el</th><th className="num">Cantidad ({item.producto.unidad})</th><th /></tr></thead>
+              <tbody>
+                {lotes.map((l, i) => (
+                  <tr key={i}>
+                    <td><input type="date" value={l.fecha} onChange={(e) => cambiar(i, 'fecha', e.target.value)} /></td>
+                    <td><input className="num" type="number" min={0} step="any" value={l.cantidad} onChange={(e) => cambiar(i, 'cantidad', e.target.value)} /></td>
+                    <td className="actions"><button className="btn btn-sm btn-ghost" onClick={() => setLotes((ls) => ls.filter((_, j) => j !== i))} aria-label="Quitar fecha">✕</button></td>
+                  </tr>
+                ))}
+                <tr><td><b>Total</b></td><td className="num"><b>{qty(total)}</b></td><td /></tr>
+              </tbody>
+            </table>
+            <div className="row">
+              <button className="btn btn-sm" onClick={() => setLotes((ls) => [...ls, { fecha: '', cantidad: '' }])}>+ Agregar fecha</button>
+              {!item.producto.controlaVencimiento && lotes.length > 0 && (
+                <button className="btn btn-sm btn-ghost" onClick={() => (setCantidad(String(total)), setLotes([]))}>Quitar fechas</button>
+              )}
+            </div>
+            {!filasOk && <div className="texto-danger small">Cada cantidad necesita su fecha.</div>}
+          </>
+        ) : (
+          <>
+            <Campo label={`Cantidad contada (${item.producto.unidad})`}>
+              <input className="num" type="number" min={0} step="any" value={cantidad} onChange={(e) => setCantidad(e.target.value)} autoFocus />
+            </Campo>
+            <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => setLotes([{ fecha: '', cantidad }])}>Detallar por fecha de vencimiento</button>
+          </>
+        )}
+        <div className="muted">
+          Conteos recibidos: {item.conteos.map((c) => `${c.operador.nombre} ${qty(c.cantidad)}${c.lotes.length ? ` (${textoLotes(c.lotes)})` : ''}`).join(' · ')}
+        </div>
       </div>
     </Modal>
   );
@@ -506,7 +555,7 @@ function Validar({ detalle, onClose, alValidar }: { detalle: Detalle; onClose: (
       else faltan -= d;
       valor += d * n(it.producto.costo);
     }
-    return { sobran, faltan, valor, cambios, vencimientos: detalle.items.filter((it) => it.fechaVencimiento).length };
+    return { sobran, faltan, valor, cambios, vencimientos: detalle.items.filter((it) => it.lotes.length).length };
   }, [detalle]);
   const validar = async () => {
     setOcupado(true);
@@ -536,7 +585,7 @@ function Validar({ detalle, onClose, alValidar }: { detalle: Detalle; onClose: (
         <ul className="muted">
           <li>Cada diferencia queda en el kardex como movimiento <b>Inventario #{detalle.id}</b>.</li>
           <li>Lo vendido mientras se contaba no se pierde: se aplica solo la diferencia sobre el stock actual.</li>
-          {resumen.vencimientos > 0 && <li>{resumen.vencimientos} producto(s) quedarán con la fecha de vencimiento registrada.</li>}
+          {resumen.vencimientos > 0 && <li>{resumen.vencimientos} producto(s) quedarán con los lotes contados (fecha y cantidad); sus lotes anteriores se reemplazan.</li>}
           <li>Los {Math.max(0, detalle.totalProductos - detalle.items.length)} productos no contados conservan su stock.</li>
         </ul>
       </div>
