@@ -1,6 +1,7 @@
 # Instala o actualiza Candy's Market en esta PC.
 # Lo abre INSTALAR.bat (o ACTUALIZAR.bat con -Actualizar); no necesita internet.
-param([switch]$Actualizar)
+# actualizar-github.ps1 lo llama con -Destino y -SinPreguntas tras armar el paquete nuevo.
+param([switch]$Actualizar, [string]$Destino, [switch]$SinPreguntas)
 . (Join-Path $PSScriptRoot 'comun.ps1')
 
 $Paquete = Split-Path -Parent $PSScriptRoot          # ...\paquete
@@ -64,15 +65,19 @@ function Crear-Accesos($conInicio) {
   $sh = New-Object -ComObject WScript.Shell
   $icono = Join-Path $Scripts 'candys.ico'
   $escritorio = [Environment]::GetFolderPath('Desktop')
+  $wscript = "$env:SystemRoot\System32\wscript.exe"
   $accesos = @(
-    @{ Ruta = Join-Path $escritorio "Candy's Market.lnk"; Vbs = 'abrir.vbs' },
-    @{ Ruta = Join-Path $escritorio "Cerrar Candy's Market.lnk"; Vbs = 'cerrar.vbs' }
+    @{ Ruta = Join-Path $escritorio "Candy's Market.lnk"; Exe = $wscript; Archivo = 'abrir.vbs' },
+    @{ Ruta = Join-Path $escritorio "Cerrar Candy's Market.lnk"; Exe = $wscript; Archivo = 'cerrar.vbs' },
+    # Con ventana visible: muestra las novedades y el avance.
+    @{ Ruta = Join-Path $escritorio "Actualizar Candy's Market.lnk"; Exe = "$env:SystemRoot\System32\cmd.exe"; Archivo = 'actualizar.bat' }
   )
-  if ($conInicio) { $accesos += @{ Ruta = Join-Path ([Environment]::GetFolderPath('Startup')) "Candy's Market.lnk"; Vbs = 'abrir.vbs' } }
+  if ($conInicio) { $accesos += @{ Ruta = Join-Path ([Environment]::GetFolderPath('Startup')) "Candy's Market.lnk"; Exe = $wscript; Archivo = 'abrir.vbs' } }
   foreach ($a in $accesos) {
     $lnk = $sh.CreateShortcut($a.Ruta)
-    $lnk.TargetPath = "$env:SystemRoot\System32\wscript.exe"
-    $lnk.Arguments = "`"$(Join-Path $Scripts $a.Vbs)`""
+    $lnk.TargetPath = $a.Exe
+    if ($a.Exe -eq $wscript) { $lnk.Arguments = "`"$(Join-Path $Scripts $a.Archivo)`"" }
+    else { $lnk.Arguments = "/c `"`"$(Join-Path $Scripts $a.Archivo)`"`"" }
     $lnk.WorkingDirectory = $Scripts
     $lnk.IconLocation = "$icono,0"
     $lnk.Save()
@@ -145,7 +150,8 @@ Ok "PostgreSQL $PgVersion encontrado en $PgBin"
 Titulo 'Carpeta de instalación'
 $sugerida = Buscar-Instalacion
 if (-not $sugerida) { $sugerida = 'C:\CandysMarket' }
-if ($Actualizar) { $destino = Read-Host "Carpeta del sistema a actualizar [$sugerida]" }
+if ($Destino) { $destino = $Destino }
+elseif ($Actualizar) { $destino = Read-Host "Carpeta del sistema a actualizar [$sugerida]" }
 else { $destino = Read-Host "Dónde instalar [$sugerida]" }
 if (-not $destino) { $destino = $sugerida }
 $destino = Ruta $destino
@@ -157,7 +163,7 @@ if ($Actualizar -and -not $hayInstalacion) { Falla "En $destino no hay una insta
 if ($hayInstalacion) {
   Aviso "Ya hay una instalación en $destino. Se actualizará el programa y tus datos se quedan igual."
   Aviso 'Antes se guarda una copia de seguridad de la base de datos.'
-  if (-not (SiNo '¿Continuar?')) { Falla 'Cancelado. No se cambió nada.' }
+  if (-not $SinPreguntas -and -not (SiNo '¿Continuar?')) { Falla 'Cancelado. No se cambió nada.' }
 
   if (Test-Path (Join-Path $Scripts 'detener.ps1')) { & (Join-Path $Scripts 'detener.ps1') -Silencioso }
   $cfg = Cargar-Config $ConfigEnv
@@ -183,7 +189,7 @@ if ($hayInstalacion) {
   & (Join-Path $Scripts 'iniciar.ps1')
   Write-Host ''
   Ok 'Listo: el sistema se actualizó y ya está abierto.'
-  Read-Host 'Presiona Enter para cerrar' | Out-Null
+  if (-not $SinPreguntas) { Read-Host 'Presiona Enter para cerrar' | Out-Null }
   exit 0
 }
 
@@ -310,7 +316,7 @@ Titulo 'Accesos directos'
 Abrir-Firewall
 $conInicio = SiNo '¿Quieres que el sistema se abra solo al encender la PC?'
 Crear-Accesos $conInicio
-Ok 'En el escritorio quedaron "Candy''s Market" y "Cerrar Candy''s Market".'
+Ok 'En el escritorio quedaron "Candy''s Market", "Cerrar Candy''s Market" y "Actualizar Candy''s Market".'
 
 & (Join-Path $Scripts 'iniciar.ps1')
 

@@ -67,7 +67,10 @@ ZIP_NODE="$SALIDA/cache/node-$NODE_VERSION-win-x64.zip"
 rm -rf "$TRABAJO/node" && mkdir -p "$TRABAJO/node"
 unzip -q "$ZIP_NODE" -d "$TRABAJO/node"
 mkdir -p "$APP/node"
-cp "$TRABAJO/node/node-$NODE_VERSION-win-x64/node.exe" "$TRABAJO/node/node-$NODE_VERSION-win-x64/LICENSE" "$APP/node/"
+NODE_WIN="$TRABAJO/node/node-$NODE_VERSION-win-x64"
+cp "$NODE_WIN/node.exe" "$NODE_WIN/LICENSE" "$NODE_WIN/npm.cmd" "$NODE_WIN/npx.cmd" "$APP/node/"
+# npm lo usa "Actualizar Candy's Market" para compilar lo que baja de GitHub.
+mkdir -p "$APP/node/node_modules" && cp -r "$NODE_WIN/node_modules/npm" "$APP/node/node_modules/npm"
 
 echo "== Scripts del instalador"
 cp -r "$REPO/instalador/windows/scripts" "$PAQ/paquete/scripts"
@@ -84,7 +87,9 @@ for f in pathlib.Path(sys.argv[1]).rglob('*'):
     else:
         f.write_bytes(texto.encode('latin-1', errors='replace'))
 PY
-git -C "$REPO" rev-parse --short HEAD > "$PAQ/paquete/version.txt"
+git -C "$REPO" rev-parse --short=7 HEAD > "$PAQ/paquete/version.txt"
+# actualizar-github.ps1 la compara con la última de GitHub.
+cp "$PAQ/paquete/version.txt" "$APP/version.txt"
 
 echo "== Comprimiendo"
 rm -f "$SALIDA/$NOMBRE.zip"

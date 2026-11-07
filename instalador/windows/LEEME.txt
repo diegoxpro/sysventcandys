@@ -51,6 +51,7 @@ Uso diario
 ----------
 - "Candy's Market" en el escritorio: enciende el sistema y abre el navegador.
 - "Cerrar Candy's Market": lo apaga.
+- "Actualizar Candy's Market": trae lo último de GitHub (ver abajo).
 - Si no abre, el detalle del error está en C:\CandysMarket\logs\sistema.log
 
 Actualizar (si la PC ya tiene el sistema instalado con este paquete)
@@ -61,6 +62,17 @@ Actualizar (si la PC ya tiene el sistema instalado con este paquete)
 Apaga el sistema, guarda una copia de la base de datos en datos\backups,
 cambia el programa, actualiza la base y lo vuelve a abrir. Tus datos,
 usuarios, certificado SUNAT y configuración se quedan igual.
+
+Actualizar desde GitHub (con internet)
+--------------------------------------
+En el escritorio queda "Actualizar Candy's Market". Con doble clic:
+1) Te muestra qué cambió desde tu versión y pregunta si actualizar.
+2) Baja el código de GitHub y lo compila en C:\CandysMarket\actualizacion
+   (unos minutos; el sistema sigue funcionando mientras tanto).
+3) Recién al final apaga el sistema, guarda un backup de la base, cambia el
+   programa y lo vuelve a abrir.
+Si se corta la luz o el internet antes del paso 3, el sistema queda como
+estaba: solo vuelve a hacer doble clic. Cierra la caja antes de actualizar.
 
 Celulares para el inventario
 ----------------------------
