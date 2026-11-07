@@ -368,54 +368,185 @@ const FORMATOS = [
   BarcodeFormat.CODE_128, BarcodeFormat.CODE_39, BarcodeFormat.CODE_93, BarcodeFormat.ITF, BarcodeFormat.CODABAR,
 ];
 
+const CLAVE_CAMARA = 'candys.inv.camara';
+
+interface Camara {
+  id: string;
+  nombre: string;
+}
+
+/**
+ * Cámaras traseras ordenadas para que la principal quede primero. En los
+ * Samsung (A55 y otros) "environment" puede abrir el gran angular o el macro,
+ * que no enfocan de cerca; la principal suele ser "camera2 0" / la de número
+ * más bajo.
+ */
+async function listarCamaras(): Promise<Camara[]> {
+  const todas = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput');
+  const traseras = todas.filter((d) => /back|rear|trasera|posterior|environment/i.test(d.label));
+  const lista = traseras.length ? traseras : todas;
+  const numero = (l: string) => Number(/(?:camera2?\s*|c[aá]mara\s*)(\d+)/i.exec(l)?.[1] ?? 99);
+  return [...lista]
+    .sort((x, y) => numero(x.label) - numero(y.label))
+    .map((d, i) => ({ id: d.deviceId, nombre: d.label || `Cámara ${i + 1}` }));
+}
+
+interface Detector {
+  detect(fuente: HTMLVideoElement): Promise<{ rawValue: string }[]>;
+}
+
+/** Lector nativo de Android (Chrome): más rápido y preciso que el de JavaScript. */
+async function detectorNativo(): Promise<Detector | null> {
+  const BD = (window as unknown as { BarcodeDetector?: { new (o: { formats: string[] }): Detector; getSupportedFormats(): Promise<string[]> } }).BarcodeDetector;
+  if (!BD) return null;
+  try {
+    const soportados = await BD.getSupportedFormats();
+    const formatos = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'code_93', 'itf', 'codabar'].filter((f) => soportados.includes(f));
+    return formatos.includes('ean_13') ? new BD({ formats: formatos }) : null;
+  } catch {
+    return null;
+  }
+}
+
 function Escaner({ onCodigo, onCerrar }: { onCodigo: (c: string) => void; onCerrar: () => void }) {
   const video = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState('');
   const [manual, setManual] = useState('');
+  const [camaras, setCamaras] = useState<Camara[]>([]);
+  const [camara, setCamara] = useState<string | null>(() => leer<string | null>(CLAVE_CAMARA, null));
+  const [linterna, setLinterna] = useState<boolean | null>(null);
+  const pista = useRef<MediaStreamTrack | null>(null);
   const listo = useRef(false);
   const alLeer = useRef(onCodigo);
   alLeer.current = onCodigo;
 
   useEffect(() => {
-    const hints = new Map();
-    hints.set(DecodeHintType.POSSIBLE_FORMATS, FORMATOS);
-    hints.set(DecodeHintType.TRY_HARDER, true);
-    const lector = new BrowserMultiFormatReader(hints, { delayBetweenScanAttempts: 120 });
-    let controles: IScannerControls | null = null;
     let vivo = true;
-    lector
-      .decodeFromConstraints({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false }, video.current!, (r) => {
-        if (!r || listo.current) return;
-        listo.current = true;
-        navigator.vibrate?.(80);
-        controles?.stop();
-        alLeer.current(r.getText());
-      })
-      .then((c) => {
-        controles = c;
-        if (!vivo) c.stop();
-      })
-      .catch((e: Error) => {
+    let stream: MediaStream | null = null;
+    let zxing: IScannerControls | null = null;
+    let temporizador = 0;
+    listo.current = false;
+
+    const leido = (texto: string) => {
+      if (listo.current || !vivo) return;
+      listo.current = true;
+      navigator.vibrate?.(80);
+      alLeer.current(texto);
+    };
+
+    (async () => {
+      try {
+        let lista = await listarCamaras().catch(() => [] as Camara[]);
+        // Sin permiso todavía no hay nombres: se pide una vez y se vuelve a listar.
+        if (!lista.some((c) => c.nombre && !c.nombre.startsWith('Cámara '))) {
+          const prueba = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+          prueba.getTracks().forEach((t) => t.stop());
+          lista = await listarCamaras();
+        }
+        if (!vivo) return;
+        setCamaras(lista);
+        const elegida = lista.find((c) => c.id === camara) ?? lista[0];
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: elegida
+            ? { deviceId: { exact: elegida.id }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+            : { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+          audio: false,
+        });
+        if (!vivo) return stream.getTracks().forEach((t) => t.stop());
+        const track = stream.getVideoTracks()[0];
+        pista.current = track;
+        const cap = (track.getCapabilities?.() ?? {}) as MediaTrackCapabilities & { focusMode?: string[]; torch?: boolean };
+        if (cap.focusMode?.includes('continuous')) {
+          await track.applyConstraints({ advanced: [{ focusMode: 'continuous' } as MediaTrackConstraintSet] }).catch(() => undefined);
+        }
+        setLinterna(cap.torch ? false : null);
+        const v = video.current!;
+        v.srcObject = stream;
+        await v.play().catch(() => undefined);
+
+        const nativo = await detectorNativo();
+        if (nativo) {
+          const buscar = async () => {
+            if (!vivo || listo.current) return;
+            try {
+              if (v.readyState >= 2) {
+                const r = await nativo.detect(v);
+                if (r[0]?.rawValue) return leido(r[0].rawValue);
+              }
+            } catch {
+              /* cuadro sin imagen todavía */
+            }
+            temporizador = window.setTimeout(buscar, 120);
+          };
+          buscar();
+        } else {
+          const hints = new Map();
+          hints.set(DecodeHintType.POSSIBLE_FORMATS, FORMATOS);
+          hints.set(DecodeHintType.TRY_HARDER, true);
+          const lector = new BrowserMultiFormatReader(hints, { delayBetweenScanAttempts: 120 });
+          zxing = await lector.decodeFromStream(stream, v, (r) => r && leido(r.getText()));
+          if (!vivo) zxing.stop();
+        }
+      } catch (e) {
+        if (!vivo) return;
+        const err = e as Error;
+        if (camara && err.name === 'OverconstrainedError') {
+          // La cámara guardada ya no existe: se vuelve a la principal.
+          guardar(CLAVE_CAMARA, null);
+          return setCamara(null);
+        }
         setError(
-          e.name === 'NotAllowedError'
+          err.name === 'NotAllowedError'
             ? 'No diste permiso para usar la cámara. Actívalo en el candado de la barra de direcciones.'
             : window.isSecureContext
-              ? 'No se pudo abrir la cámara. Escribe el código abajo.'
+              ? 'No se pudo abrir la cámara. Prueba "Cambiar cámara" o escribe el código abajo.'
               : 'La cámara necesita la conexión segura (https). Vuelve a escanear el QR de la PC.',
         );
-      });
+      }
+    })();
+
     return () => {
       vivo = false;
-      controles?.stop();
+      clearTimeout(temporizador);
+      zxing?.stop();
+      stream?.getTracks().forEach((t) => t.stop());
+      pista.current = null;
     };
-  }, []);
+  }, [camara]);
+
+  const indice = Math.max(0, camaras.findIndex((c) => c.id === camara));
+  const cambiarCamara = () => {
+    if (camaras.length < 2) return;
+    const sig = camaras[(indice + 1) % camaras.length].id;
+    guardar(CLAVE_CAMARA, sig);
+    setError('');
+    setCamara(sig);
+  };
+  const alternarLinterna = async () => {
+    const t = pista.current;
+    if (!t || linterna === null) return;
+    try {
+      await t.applyConstraints({ advanced: [{ torch: !linterna } as MediaTrackConstraintSet] });
+      setLinterna(!linterna);
+    } catch {
+      setLinterna(null);
+    }
+  };
 
   return (
     <div className="mv-escaner">
-      <video ref={video} playsInline muted />
+      <video ref={video} playsInline muted autoPlay />
       <div className="mv-mira" aria-hidden="true" />
       <div className="mv-escaner-pie">
-        {error ? <div className="mv-banda danger">{error}</div> : <p>Apunta al código de barras</p>}
+        {error ? <div className="mv-banda danger">{error}</div> : <p>Apunta al código de barras, a unos 15 cm</p>}
+        <div className="mv-escaner-botones">
+          {camaras.length > 1 && (
+            <button type="button" className="mv-btn" onClick={cambiarCamara}>Cambiar cámara ({indice + 1}/{camaras.length})</button>
+          )}
+          {linterna !== null && (
+            <button type="button" className="mv-btn" onClick={alternarLinterna}>{linterna ? 'Apagar luz' : 'Linterna'}</button>
+          )}
+        </div>
         <form
           className="mv-manual"
           onSubmit={(e) => {

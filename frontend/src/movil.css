@@ -60,3 +60,6 @@
 .mv-total { display: flex; justify-content: space-between; align-items: baseline; padding: 10px 14px; border-radius: 10px; background: var(--surface-2, #f3f1f5); }
 .mv-total b { font-size: 30px; }
 .mv-error { margin: 0; color: var(--danger, #c92a2a); font-size: 14px; }
+.mv-escaner-botones { display: flex; gap: 8px; }
+.mv-escaner-botones:empty { display: none; }
+.mv-escaner-botones .mv-btn { flex: 1; min-height: 46px; }
