@@ -1,4 +1,4 @@
-import { CondicionPago, MedioPago, TipoDocumentoCompra } from '@prisma/client';
+import { CondicionPago, MedioPago, OrigenGasto, TipoDocumentoCompra } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
@@ -36,6 +36,8 @@ export class CrearCompraDto {
   @IsOptional() @IsDateString() fechaVencimiento?: string;
   /** Medio con el que se pagó una compra al contado. */
   @IsOptional() @IsEnum(MedioPago) medioPago?: MedioPago;
+  /** De dónde sale el pago al contado: del acumulado (por defecto) o de la caja del día. */
+  @IsOptional() @IsEnum(OrigenGasto) origenPago?: OrigenGasto;
   @IsOptional() @IsString() observacion?: string;
   @IsArray() @ArrayMinSize(1) @ValidateNested({ each: true }) @Type(() => CompraItemDto)
   items: CompraItemDto[];
@@ -46,7 +48,9 @@ export class PagoDto {
   @IsEnum(MedioPago) medioPago: MedioPago;
   @IsOptional() @IsString() numeroOperacion?: string;
   @IsOptional() @IsString() observacion?: string;
-  /** Pago en efectivo que sale de la caja abierta (queda como egreso de caja). */
+  /** De dónde sale el dinero: del acumulado (por defecto) o de la caja del día (solo efectivo). */
+  @IsOptional() @IsEnum(OrigenGasto) origen?: OrigenGasto;
+  /** Antiguo: equivale a origen CAJA. */
   @IsOptional() @IsBoolean() desdeCaja?: boolean;
 }
 

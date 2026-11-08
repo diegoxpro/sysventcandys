@@ -1,6 +1,7 @@
 import { KeyboardEvent, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
+import GastoModal from '../components/GastoModal';
 import { Campo, Modal, useCarga, useToast, Vacio } from '../components/ui';
 import { fechaHora, money, n } from '../format';
 import { imprimirCierre } from '../ticket';
@@ -12,7 +13,8 @@ const cuadra = (v: number) => Math.abs(v) < 0.005;
 
 const TIPO_MOV: Record<TipoMovimientoCaja, { label: string; badge: string }> = {
   INGRESO: { label: 'Ingreso', badge: 'ok' },
-  EGRESO: { label: 'Egreso', badge: 'danger' },
+  EGRESO: { label: 'Gasto', badge: 'danger' },
+  RETIRO: { label: 'Retiro', badge: 'warn' },
   VENTA_SIN_COMPROBANTE: { label: 'Venta sin comprobante', badge: 'info' },
 };
 
@@ -22,7 +24,8 @@ export default function Caja() {
   const { data: cfg } = useCarga(() => api<Configuracion>('/configuracion'), []);
   const { data: historial, recargar: recargarHistorial } = useCarga(() => api<TCaja[]>('/caja/historial'), []);
   const [monto, setMonto] = useState('');
-  const [mov, setMov] = useState<'INGRESO' | 'EGRESO' | null>(null);
+  const [mov, setMov] = useState<'INGRESO' | 'RETIRO' | null>(null);
+  const [gasto, setGasto] = useState(false);
   const [cerrando, setCerrando] = useState(false);
   const [viendo, setViendo] = useState<TCaja | null>(null);
 
@@ -48,7 +51,8 @@ export default function Caja() {
         {caja && (
           <div className="row">
             <button className="btn" onClick={() => setMov('INGRESO')}>Ingreso</button>
-            <button className="btn" onClick={() => setMov('EGRESO')}>Gasto o retiro</button>
+            <button className="btn" onClick={() => setGasto(true)} title="Lo normal es pagar los gastos desde el acumulado (Gastos › Acumulado)">Gasto</button>
+            <button className="btn" onClick={() => setMov('RETIRO')}>Retiro</button>
             <Link className="btn" to="/venta">Ir a vender</Link>
             <button className="btn btn-primary" onClick={() => setCerrando(true)}>Cerrar caja</button>
           </div>
@@ -79,7 +83,7 @@ export default function Caja() {
                       <td><span className={`badge ${TIPO_MOV[m.tipo].badge}`}>{TIPO_MOV[m.tipo].label}</span></td>
                       <td>{m.concepto}{m.medioPago && m.medioPago !== 'EFECTIVO' && <span className="muted"> · {MEDIO_LABEL[m.medioPago]}</span>}</td>
                       <td>{m.usuario.nombre}</td>
-                      <td className="num">{m.tipo === 'EGRESO' ? '−' : ''}{money(m.monto)}</td>
+                      <td className="num">{m.tipo === 'EGRESO' || m.tipo === 'RETIRO' ? '−' : ''}{money(m.monto)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -115,10 +119,12 @@ export default function Caja() {
         </div>
       </div>
 
+      {gasto && <GastoModal soloCaja onClose={() => setGasto(false)} onListo={() => (setGasto(false), recargar())} />}
       {mov && <MovimientoModal tipo={mov} onClose={() => setMov(null)} onListo={() => (setMov(null), recargar())} />}
       {cerrando && caja && (
         <CierreModal
           caja={caja}
+          fondoDia={n(cfg?.montoInicialCaja ?? 150)}
           onClose={() => setCerrando(false)}
           onListo={(c) => {
             setCerrando(false);
@@ -142,9 +148,22 @@ export default function Caja() {
             </div>
           )}
           <Resumen r={viendo.resumen!} />
+          {viendo.resumen?.alAcumulado && <AlAcumulado {...viendo.resumen.alAcumulado} />}
           {viendo.observacion && <p>Observación: {viendo.observacion}</p>}
         </Modal>
       )}
+    </div>
+  );
+}
+
+/** Lo que pasa al acumulado al cerrar: el efectivo menos el fondo del día siguiente, y todo lo digital. */
+function AlAcumulado({ efectivo, yape, quedaEnCaja, previo }: { efectivo: number; yape: number; quedaEnCaja: number; previo?: boolean }) {
+  return (
+    <div className="alert info">
+      <div>
+        <b>{previo ? 'Al cerrar pasa al acumulado' : 'Pasó al acumulado'}:</b> {money(efectivo)} en efectivo y {money(yape)} en Yape
+        {' '}· quedan {money(quedaEnCaja)} en caja para el día siguiente.
+      </div>
     </div>
   );
 }
@@ -203,7 +222,12 @@ function Balance({ r, contado, digital }: { r: ResumenCaja; contado?: number; di
         {fila('Ventas en efectivo', n(r.porMedio.EFECTIVO))}
         {sc && fila('Ventas sin comprobante en efectivo', n(sc.EFECTIVO))}
         {fila('Otros ingresos de efectivo', n(r.ingresos))}
-        {fila('Gastos y retiros', n(r.gastos ?? r.egresos), '−')}
+        {r.retiros == null ? fila('Gastos y retiros', n(r.gastos ?? r.egresos), '−') : (
+          <>
+            {fila('Gastos', n(r.gastos), '−')}
+            {fila('Retiros', n(r.retiros), '−')}
+          </>
+        )}
         {r.pagosProveedor != null && fila('Pagos a proveedores', n(r.pagosProveedor), '−')}
         <tr className="balance-total"><td>Total efectivo en caja</td><td className="num">{money(r.efectivoEsperado)}</td></tr>
         {contado != null && (
@@ -283,14 +307,14 @@ function VentaSinComprobante({ onListo }: { onListo: () => void }) {
   );
 }
 
-function MovimientoModal({ tipo, onClose, onListo }: { tipo: 'INGRESO' | 'EGRESO'; onClose: () => void; onListo: () => void }) {
+function MovimientoModal({ tipo, onClose, onListo }: { tipo: 'INGRESO' | 'RETIRO'; onClose: () => void; onListo: () => void }) {
   const avisar = useToast();
   const [concepto, setConcepto] = useState('');
   const [monto, setMonto] = useState('');
   const guardar = async () => {
     try {
       await api('/caja/movimientos', { body: { tipo, concepto, monto: n(monto) } });
-      avisar(tipo === 'INGRESO' ? 'Ingreso registrado' : 'Gasto registrado');
+      avisar(tipo === 'INGRESO' ? 'Ingreso registrado' : 'Retiro registrado');
       onListo();
     } catch (e) {
       avisar((e as Error).message, true);
@@ -298,7 +322,7 @@ function MovimientoModal({ tipo, onClose, onListo }: { tipo: 'INGRESO' | 'EGRESO
   };
   return (
     <Modal
-      titulo={tipo === 'INGRESO' ? 'Ingreso de efectivo' : 'Gasto o retiro de efectivo'}
+      titulo={tipo === 'INGRESO' ? 'Ingreso de efectivo' : 'Retiro de efectivo de la caja del día'}
       onClose={onClose}
       pie={
         <>
@@ -309,7 +333,7 @@ function MovimientoModal({ tipo, onClose, onListo }: { tipo: 'INGRESO' | 'EGRESO
     >
       <div className="grid-2">
         <Campo label="Concepto" className="span-2">
-          <input value={concepto} onChange={(e) => setConcepto(e.target.value)} placeholder={tipo === 'INGRESO' ? 'Cambio de sencillo, aporte…' : 'Pasajes, bolsas, retiro del dueño…'} autoFocus />
+          <input value={concepto} onChange={(e) => setConcepto(e.target.value)} placeholder={tipo === 'INGRESO' ? 'Cambio de sencillo, aporte…' : 'Retiro del dueño…'} autoFocus />
         </Campo>
         <Campo label="Monto"><input className="num" type="number" min="0" step="0.1" value={monto} onChange={(e) => setMonto(e.target.value)} /></Campo>
       </div>
@@ -317,7 +341,7 @@ function MovimientoModal({ tipo, onClose, onListo }: { tipo: 'INGRESO' | 'EGRESO
   );
 }
 
-function CierreModal({ caja, onClose, onListo }: { caja: TCaja; onClose: () => void; onListo: (c: TCaja) => void }) {
+function CierreModal({ caja, fondoDia, onClose, onListo }: { caja: TCaja; fondoDia: number; onClose: () => void; onListo: (c: TCaja) => void }) {
   const avisar = useToast();
   const { data: denominaciones } = useCarga(() => api<number[]>('/caja/denominaciones'), []);
   const [conteo, setConteo] = useState<Record<string, string>>({});
@@ -453,6 +477,12 @@ function CierreModal({ caja, onClose, onListo }: { caja: TCaja; onClose: () => v
           <div className="card stat"><div className="label">Efectivo contado</div><div className="value">{money(contado)}</div></div>
           <div className="card stat"><div className="label">Efectivo en caja actual</div><div className="value" style={{ color: 'var(--accent)' }}>{money(r.efectivoEsperado)}</div></div>
         </div>
+        <AlAcumulado
+          efectivo={r2(contado - Math.min(contado, fondoDia))}
+          yape={r2(DIGITALES.reduce((s, m) => s + (digitalNum[m] ?? n(total[m])), 0))}
+          quedaEnCaja={r2(Math.min(contado, fondoDia))}
+          previo
+        />
         <Campo label={forzar && !cuadrada ? 'Observación (obligatoria: motivo de la diferencia)' : 'Observación'}>
           <input value={observacion} onChange={(e) => setObs(e.target.value)} placeholder={forzar && !cuadrada ? 'Ej.: faltó S/ 2.00 por vuelto mal dado' : undefined} />
         </Campo>

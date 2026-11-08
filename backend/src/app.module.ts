@@ -8,6 +8,8 @@ import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { PermisosGuard } from './auth/permisos.guard';
 import { ComprasModule } from './compras/compras.module';
 import { ConfiguracionModule } from './configuracion/configuracion.module';
+import { FondoModule } from './fondo/fondo.module';
+import { GastosModule } from './gastos/gastos.module';
 import { ImportacionModule } from './importacion/importacion.module';
 import { InventarioModule } from './inventario/inventario.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -31,6 +33,8 @@ import { VentasModule } from './ventas/ventas.module';
     InventarioModule,
     ImportacionModule,
     CajaModule,
+    FondoModule,
+    GastosModule,
     VentasModule,
     ReportesModule,
     BackupModule,

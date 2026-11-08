@@ -30,7 +30,7 @@ const RESULTADO: Record<string, string> = { ACEPTADO: 'Aceptada', OBSERVADO: 'Ac
 const correlativo = (serie: string, numero: number) => `${serie}-${String(numero).padStart(8, '0')}`;
 const COMPROBANTE: Record<string, string> = { BOLETA: 'BOLETA DE VENTA', BOLETA_LIBRE: 'BOLETA VENTA LIBRE' };
 
-export type CategoriaReporte = 'ventas' | 'compras' | 'kardex' | 'sunat';
+export type CategoriaReporte = 'ventas' | 'compras' | 'kardex' | 'sunat' | 'gastos';
 interface DefReporte {
   titulo: string;
   categoria: CategoriaReporte;
@@ -57,6 +57,12 @@ export const REPORTES = {
   'stock-valorizado': { titulo: 'Stock valorizado', categoria: 'kardex', usaFechas: false },
   'boletas-sunat': { titulo: 'Boletas electrónicas (SUNAT)', categoria: 'sunat' },
   'envios-sunat': { titulo: 'Historial de envíos a SUNAT', categoria: 'sunat' },
+  'gastos-detallado': { titulo: 'Gastos detallado', categoria: 'gastos' },
+  'gastos-por-categoria': { titulo: 'Gastos por categoría', categoria: 'gastos' },
+  'gastos-por-mes': { titulo: 'Gastos por mes', categoria: 'gastos' },
+  'sueldos-por-trabajador': { titulo: 'Sueldos y adelantos por trabajador', categoria: 'gastos' },
+  'movimientos-acumulado': { titulo: 'Movimientos del acumulado', categoria: 'gastos' },
+  'conteos-acumulado': { titulo: 'Conteos del acumulado', categoria: 'gastos' },
 } satisfies Record<string, DefReporte>;
 export type NombreReporte = keyof typeof REPORTES;
 export const defReporte = (n: NombreReporte): DefReporte => REPORTES[n];
@@ -72,6 +78,17 @@ const MOVIMIENTO: Record<string, string> = {
   MERMA: 'Merma',
   AJUSTE: 'Ajuste',
   INVENTARIO: 'Inventario',
+};
+
+const ORIGEN_GASTO: Record<string, string> = { ACUMULADO: 'Acumulado', CAJA: 'Caja del día' };
+const TIPO_FONDO: Record<string, string> = {
+  CIERRE_CAJA: 'Cierre de caja',
+  GASTO: 'Gasto',
+  PAGO_PROVEEDOR: 'Pago a proveedor',
+  RETIRO: 'Retiro o depósito',
+  TRASPASO: 'Traspaso',
+  AJUSTE_CONTEO: 'Ajuste de conteo',
+  ANULACION: 'Anulación',
 };
 
 @Injectable()
@@ -123,6 +140,18 @@ export class ReportesService {
         return this.enviosSunat(f);
       case 'stock-valorizado':
         return this.stockValorizado();
+      case 'gastos-detallado':
+        return this.gastosDetallado(f);
+      case 'gastos-por-categoria':
+        return this.gastosPorCategoria(f);
+      case 'gastos-por-mes':
+        return this.gastosPorMes(f);
+      case 'sueldos-por-trabajador':
+        return this.sueldosPorTrabajador(f);
+      case 'movimientos-acumulado':
+        return this.movimientosAcumulado(f);
+      case 'conteos-acumulado':
+        return this.conteosAcumulado(f);
       default:
         throw new BadRequestException('Reporte desconocido');
     }
@@ -290,9 +319,14 @@ export class ReportesService {
       this.prisma.$queryRaw<{ valor: number }[]>`
         SELECT COALESCE(SUM(-cantidad * "costoUnitario"), 0)::float AS valor FROM "MovimientoStock"
         WHERE tipo = 'MERMA' AND fecha >= ${f.desde} AND fecha < ${f.hasta}`,
-      this.prisma.movimientoCaja.aggregate({ where: { tipo: 'EGRESO', pagoProveedorId: null, fecha: rango }, _sum: { monto: true } }),
+      this.prisma.gasto.aggregate({ where: { estado: 'REGISTRADO', fecha: rango }, _sum: { monto: true } }),
       this.prisma.compra.aggregate({ where: { estado: 'REGISTRADA', fechaEmision: rango }, _sum: { total: true } }),
     ]);
+    const [retirosCaja, retirosFondo] = await Promise.all([
+      this.prisma.movimientoCaja.aggregate({ where: { tipo: 'RETIRO', fecha: rango }, _sum: { monto: true } }),
+      this.prisma.movimientoFondo.aggregate({ where: { tipo: 'RETIRO', fecha: rango }, _sum: { monto: true } }),
+    ]);
+    const retiros = r2(r2(retirosCaja._sum.monto) - r2(retirosFondo._sum.monto));
     const venta = r2(ventas._sum.total);
     const costo = r2(ventas._sum.costoTotal);
     const bruta = r2(venta - costo);
@@ -304,8 +338,9 @@ export class ReportesService {
       { concepto: 'Costo de lo vendido', monto: -costo, nota: 'Al último costo de compra de cada producto' },
       { concepto: 'Utilidad bruta', monto: bruta, nota: `Margen ${margen(bruta, venta)}%` },
       { concepto: 'Mermas', monto: -merma, nota: 'Valorizadas al costo' },
-      { concepto: 'Gastos y retiros de caja', monto: -gasto, nota: 'No incluye pagos a proveedores' },
+      { concepto: 'Gastos', monto: -gasto, nota: 'Del acumulado y de caja. No incluye pagos a proveedores' },
       { concepto: 'Utilidad neta aproximada', monto: neta, nota: `Margen ${margen(neta, venta)}%` },
+      { concepto: 'Retiros del dueño y depósitos (referencial)', monto: retiros, nota: 'No se resta: no es gasto del negocio' },
       { concepto: 'Compras del período (referencial)', monto: r2(compras._sum.total), nota: 'No se resta: el costo ya está en lo vendido' },
     ];
     return {
@@ -701,6 +736,213 @@ export class ReportesService {
       ],
       filas,
       totales: suma(filas, 'stock', 'valorCosto', 'valorVenta'),
+    };
+  }
+
+  // ------------------------------------------------------------ Gastos y acumulado
+
+  private gastosDel(f: Filtro) {
+    return this.prisma.gasto.findMany({
+      where: { estado: 'REGISTRADO', fecha: { gte: f.desde, lt: f.hasta } },
+      include: { categoria: true, usuario: { select: { nombre: true } } },
+      orderBy: { fecha: 'asc' },
+    });
+  }
+
+  private async gastosDetallado(f: Filtro): Promise<Reporte> {
+    const gastos = await this.gastosDel(f);
+    const filas = gastos.map((g) => ({
+      fecha: g.fecha,
+      categoria: g.categoria.nombre,
+      concepto: g.concepto,
+      trabajador: g.trabajador ?? '',
+      origen: ORIGEN_GASTO[g.origen],
+      medio: MEDIO[g.medioPago] ?? g.medioPago,
+      nota: g.nota ?? '',
+      usuario: g.usuario.nombre,
+      monto: r2(g.monto),
+    }));
+    return {
+      titulo: 'Gastos detallado',
+      subtitulo: f.etiqueta,
+      columnas: [
+        { clave: 'fecha', titulo: 'Fecha', tipo: 'fechaHora' },
+        { clave: 'categoria', titulo: 'Categoría' },
+        { clave: 'concepto', titulo: 'Concepto' },
+        { clave: 'trabajador', titulo: 'Trabajador' },
+        { clave: 'origen', titulo: 'Salió de' },
+        { clave: 'medio', titulo: 'Medio' },
+        { clave: 'nota', titulo: 'Nota' },
+        { clave: 'usuario', titulo: 'Registró' },
+        { clave: 'monto', titulo: 'Monto', tipo: 'moneda' },
+      ],
+      filas,
+      totales: suma(filas, 'monto'),
+    };
+  }
+
+  private async gastosPorCategoria(f: Filtro): Promise<Reporte> {
+    const gastos = await this.gastosDel(f);
+    const total = gastos.reduce((s, g) => s + Number(g.monto), 0);
+    const mapa = new Map<string, { categoria: string; cantidad: number; acumulado: number; caja: number; monto: number }>();
+    for (const g of gastos) {
+      const x = mapa.get(g.categoria.nombre) ?? { categoria: g.categoria.nombre, cantidad: 0, acumulado: 0, caja: 0, monto: 0 };
+      x.cantidad++;
+      x.monto += Number(g.monto);
+      if (g.origen === 'CAJA') x.caja += Number(g.monto);
+      else x.acumulado += Number(g.monto);
+      mapa.set(g.categoria.nombre, x);
+    }
+    const filas = [...mapa.values()]
+      .sort((a, b) => b.monto - a.monto)
+      .map((x) => ({ ...x, acumulado: r2(x.acumulado), caja: r2(x.caja), monto: r2(x.monto), porcentaje: total ? Math.round((x.monto / total) * 1000) / 10 : 0 }));
+    return {
+      titulo: 'Gastos por categoría',
+      subtitulo: f.etiqueta,
+      columnas: [
+        { clave: 'categoria', titulo: 'Categoría' },
+        { clave: 'cantidad', titulo: 'Gastos', tipo: 'numero' },
+        { clave: 'acumulado', titulo: 'Del acumulado', tipo: 'moneda' },
+        { clave: 'caja', titulo: 'De caja', tipo: 'moneda' },
+        { clave: 'monto', titulo: 'Total', tipo: 'moneda' },
+        { clave: 'porcentaje', titulo: '% del total', tipo: 'porcentaje' },
+      ],
+      filas,
+      totales: suma(filas, 'cantidad', 'acumulado', 'caja', 'monto'),
+    };
+  }
+
+  private async gastosPorMes(f: Filtro): Promise<Reporte> {
+    const rows = await this.prisma.$queryRaw<{ mes: string; categoria: string; monto: number; cantidad: number }[]>`
+      SELECT to_char(g.fecha AT TIME ZONE 'UTC' AT TIME ZONE ${ZONA}, 'YYYY-MM') AS mes, c.nombre AS categoria,
+             SUM(g.monto)::float AS monto, COUNT(*)::int AS cantidad
+      FROM "Gasto" g JOIN "CategoriaGasto" c ON c.id = g."categoriaId"
+      WHERE g.estado = 'REGISTRADO' AND g.fecha >= ${f.desde} AND g.fecha < ${f.hasta}
+      GROUP BY 1, 2 ORDER BY 1, 3 DESC`;
+    const filas = rows.map((r) => ({ mes: r.mes, categoria: r.categoria, cantidad: r.cantidad, monto: r2(r.monto) }));
+    return {
+      titulo: 'Gastos por mes',
+      subtitulo: f.etiqueta,
+      columnas: [
+        { clave: 'mes', titulo: 'Mes' },
+        { clave: 'categoria', titulo: 'Categoría' },
+        { clave: 'cantidad', titulo: 'Gastos', tipo: 'numero' },
+        { clave: 'monto', titulo: 'Monto', tipo: 'moneda' },
+      ],
+      filas,
+      totales: suma(filas, 'cantidad', 'monto'),
+      agruparPor: 'mes',
+    };
+  }
+
+  private async sueldosPorTrabajador(f: Filtro): Promise<Reporte> {
+    const gastos = (await this.gastosDel(f)).filter((g) => g.categoria.pideTrabajador || g.trabajador);
+    const filas = gastos
+      .map((g) => ({
+        trabajador: g.trabajador ?? '(sin nombre)',
+        fecha: g.fecha,
+        categoria: g.categoria.nombre,
+        concepto: g.concepto,
+        medio: MEDIO[g.medioPago] ?? g.medioPago,
+        monto: r2(g.monto),
+      }))
+      .sort((a, b) => a.trabajador.localeCompare(b.trabajador) || +a.fecha - +b.fecha);
+    return {
+      titulo: 'Sueldos y adelantos por trabajador',
+      subtitulo: f.etiqueta,
+      columnas: [
+        { clave: 'trabajador', titulo: 'Trabajador' },
+        { clave: 'fecha', titulo: 'Fecha', tipo: 'fechaHora' },
+        { clave: 'categoria', titulo: 'Categoría' },
+        { clave: 'concepto', titulo: 'Concepto' },
+        { clave: 'medio', titulo: 'Medio' },
+        { clave: 'monto', titulo: 'Monto', tipo: 'moneda' },
+      ],
+      filas,
+      totales: suma(filas, 'monto'),
+      agruparPor: 'trabajador',
+    };
+  }
+
+  /** Cada movimiento del acumulado con el saldo de efectivo y Yape después de él. */
+  private async movimientosAcumulado(f: Filtro): Promise<Reporte> {
+    const [antes, movs] = await Promise.all([
+      this.prisma.movimientoFondo.groupBy({ by: ['cuenta'], where: { fecha: { lt: f.desde } }, _sum: { monto: true } }),
+      this.prisma.movimientoFondo.findMany({
+        where: { fecha: { gte: f.desde, lt: f.hasta } },
+        include: { usuario: { select: { nombre: true } } },
+        orderBy: { id: 'asc' },
+      }),
+    ]);
+    let ef = r2(antes.find((a) => a.cuenta === 'EFECTIVO')?._sum.monto);
+    let ya = r2(antes.find((a) => a.cuenta === 'YAPE')?._sum.monto);
+    const filas: Record<string, unknown>[] = [{ fecha: f.desde, tipo: 'Saldo inicial', concepto: '', usuario: '', saldoEfectivo: ef, saldoYape: ya }];
+    for (const m of movs) {
+      const v = r2(m.monto);
+      if (m.cuenta === 'EFECTIVO') ef = r2(ef + v);
+      else ya = r2(ya + v);
+      filas.push({
+        fecha: m.fecha,
+        tipo: TIPO_FONDO[m.tipo] ?? m.tipo,
+        concepto: m.concepto,
+        usuario: m.usuario.nombre,
+        efectivo: m.cuenta === 'EFECTIVO' ? v : null,
+        yape: m.cuenta === 'YAPE' ? v : null,
+        saldoEfectivo: ef,
+        saldoYape: ya,
+      });
+    }
+    return {
+      titulo: 'Movimientos del acumulado',
+      subtitulo: f.etiqueta,
+      columnas: [
+        { clave: 'fecha', titulo: 'Fecha', tipo: 'fechaHora' },
+        { clave: 'tipo', titulo: 'Tipo' },
+        { clave: 'concepto', titulo: 'Concepto' },
+        { clave: 'usuario', titulo: 'Usuario' },
+        { clave: 'efectivo', titulo: 'Efectivo', tipo: 'moneda' },
+        { clave: 'yape', titulo: 'Yape', tipo: 'moneda' },
+        { clave: 'saldoEfectivo', titulo: 'Saldo efectivo', tipo: 'moneda' },
+        { clave: 'saldoYape', titulo: 'Saldo Yape', tipo: 'moneda' },
+      ],
+      filas,
+      totales: suma(filas.slice(1), 'efectivo', 'yape'),
+    };
+  }
+
+  private async conteosAcumulado(f: Filtro): Promise<Reporte> {
+    const conteos = await this.prisma.conteoFondo.findMany({
+      where: { fecha: { gte: f.desde, lt: f.hasta } },
+      include: { usuario: { select: { nombre: true } } },
+      orderBy: { id: 'asc' },
+    });
+    const filas = conteos.map((c) => ({
+      fecha: c.fecha,
+      usuario: c.usuario.nombre,
+      efectivoEsperado: r2(c.efectivoEsperado),
+      efectivoContado: r2(c.efectivoContado),
+      diferenciaEfectivo: r2(c.diferenciaEfectivo),
+      yapeEsperado: r2(c.yapeEsperado),
+      yapeContado: r2(c.yapeContado),
+      diferenciaYape: r2(c.diferenciaYape),
+      observacion: c.observacion ?? '',
+    }));
+    return {
+      titulo: 'Conteos del acumulado',
+      subtitulo: f.etiqueta,
+      columnas: [
+        { clave: 'fecha', titulo: 'Fecha', tipo: 'fechaHora' },
+        { clave: 'usuario', titulo: 'Contó' },
+        { clave: 'efectivoEsperado', titulo: 'Efectivo según sistema', tipo: 'moneda' },
+        { clave: 'efectivoContado', titulo: 'Efectivo contado', tipo: 'moneda' },
+        { clave: 'diferenciaEfectivo', titulo: 'Diferencia efectivo', tipo: 'moneda' },
+        { clave: 'yapeEsperado', titulo: 'Yape según sistema', tipo: 'moneda' },
+        { clave: 'yapeContado', titulo: 'Yape en la app', tipo: 'moneda' },
+        { clave: 'diferenciaYape', titulo: 'Diferencia Yape', tipo: 'moneda' },
+        { clave: 'observacion', titulo: 'Observación' },
+      ],
+      filas,
+      totales: suma(filas, 'diferenciaEfectivo', 'diferenciaYape'),
     };
   }
 }

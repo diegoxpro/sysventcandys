@@ -6,7 +6,7 @@ import { Campo, useCarga, useToast, Vacio } from '../components/ui';
 import { fecha, fechaHora, hoyISO, money, qty } from '../format';
 import { Configuracion, Producto } from '../types';
 
-export type CategoriaReporte = 'ventas' | 'compras' | 'kardex' | 'sunat';
+export type CategoriaReporte = 'ventas' | 'compras' | 'kardex' | 'sunat' | 'gastos';
 interface InfoReporte {
   id: string;
   titulo: string;
@@ -18,6 +18,7 @@ const ENCABEZADO: Record<CategoriaReporte, { titulo: string; inicial: string; te
   ventas: { titulo: 'Reporte de venta', inicial: 'ventas-resumido', texto: 'Ventas, utilidad, medios de pago y cajeros del período.' },
   compras: { titulo: 'Reporte de compra', inicial: 'compras-detallado', texto: 'Facturas de proveedores, compras por producto y pagos realizados.' },
   kardex: { titulo: 'Reporte de kardex', inicial: 'kardex', texto: 'Entradas, salidas y saldo de stock por producto, y stock valorizado.' },
+  gastos: { titulo: 'Reporte de gastos', inicial: 'gastos-por-categoria', texto: 'Gastos por categoría y mes, sueldos por trabajador, y movimientos y conteos del acumulado.' },
   sunat: { titulo: 'Boletas SUNAT', inicial: 'boletas-sunat', texto: 'Boletas electrónicas por día con su estado en SUNAT, y fecha y hora de cada envío.' },
 };
 

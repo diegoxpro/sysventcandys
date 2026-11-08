@@ -90,6 +90,10 @@ model Usuario {
   operadoresInventario InventarioOperador[]
   cajasCerradas        Caja[]               @relation("CajaCierre")
   movimientosCaja      MovimientoCaja[]
+  gastos               Gasto[]              @relation("GastoUsuario")
+  gastosAnulados       Gasto[]              @relation("GastoAnulador")
+  movimientosFondo     MovimientoFondo[]
+  conteosFondo         ConteoFondo[]
 }
 
 // Fila única (id = 1) con los datos de la tienda y las preferencias.
@@ -331,9 +335,10 @@ model PagoProveedor {
   numeroOperacion String?
   observacion     String?
 
-  compra         Compra          @relation(fields: [compraId], references: [id])
-  usuario        Usuario         @relation(fields: [usuarioId], references: [id])
-  movimientoCaja MovimientoCaja?
+  compra          Compra           @relation(fields: [compraId], references: [id])
+  usuario         Usuario          @relation(fields: [usuarioId], references: [id])
+  movimientoCaja  MovimientoCaja?
+  movimientoFondo MovimientoFondo?
 }
 
 // ---------------------------------------------------------------- Ventas y caja
@@ -384,6 +389,8 @@ enum TipoMovimientoCaja {
   EGRESO
   // Venta anotada a mano en caja, sin boleta ni ticket del sistema.
   VENTA_SIN_COMPROBANTE
+  // Efectivo que el dueño saca de la caja del día (no es gasto del negocio).
+  RETIRO
 }
 
 enum TipoDocIdentidad {
@@ -435,10 +442,11 @@ model Caja {
   sinCuadrar        Boolean    @default(false)
   observacion       String?
 
-  usuarioApertura Usuario          @relation("CajaApertura", fields: [usuarioAperturaId], references: [id])
-  usuarioCierre   Usuario?         @relation("CajaCierre", fields: [usuarioCierreId], references: [id])
-  ventas          Venta[]
-  movimientos     MovimientoCaja[]
+  usuarioApertura  Usuario           @relation("CajaApertura", fields: [usuarioAperturaId], references: [id])
+  usuarioCierre    Usuario?          @relation("CajaCierre", fields: [usuarioCierreId], references: [id])
+  ventas           Venta[]
+  movimientos      MovimientoCaja[]
+  movimientosFondo MovimientoFondo[]
 
   @@index([estado])
 }
@@ -459,6 +467,7 @@ model MovimientoCaja {
   caja          Caja           @relation(fields: [cajaId], references: [id])
   usuario       Usuario        @relation(fields: [usuarioId], references: [id])
   pagoProveedor PagoProveedor? @relation(fields: [pagoProveedorId], references: [id])
+  gasto         Gasto?
 }
 
 model Venta {
@@ -772,4 +781,147 @@ model PermisoHistorial {
   hechoPor Usuario  @relation("HistorialHechoPor", fields: [hechoPorId], references: [id])
 
   @@index([usuarioId, createdAt])
+}
+
+// ---------------------------------------------------------------- Gastos y acumulado
+
+// El acumulado es el dinero de las cajas anteriores: al cerrar la caja del día
+// pasa aquí todo menos el fondo para el día siguiente. Tiene dos saldos.
+enum CuentaFondo {
+  EFECTIVO
+  // Yape y también Plin, tarjeta y transferencia.
+  YAPE
+}
+
+enum TipoMovimientoFondo {
+  // Lo que deja cada cierre de caja.
+  CIERRE_CAJA
+  GASTO
+  PAGO_PROVEEDOR
+  // Retiro del dueño o depósito al banco (no es gasto del negocio).
+  RETIRO
+  // Pase entre efectivo y Yape (dos movimientos, uno por cuenta).
+  TRASPASO
+  // Diferencia encontrada en el conteo semanal.
+  AJUSTE_CONTEO
+  // Devuelve el dinero de un gasto o pago anulado.
+  ANULACION
+}
+
+/// Saldo = suma de `monto` por cuenta: positivo entra, negativo sale.
+model MovimientoFondo {
+  id              Int                 @id @default(autoincrement())
+  fecha           DateTime            @default(now())
+  usuarioId       Int
+  tipo            TipoMovimientoFondo
+  cuenta          CuentaFondo
+  monto           Decimal             @db.Decimal(12, 2)
+  concepto        String
+  cajaId          Int?
+  gastoId         Int?
+  pagoProveedorId Int?                @unique
+  conteoId        Int?
+
+  usuario       Usuario        @relation(fields: [usuarioId], references: [id])
+  caja          Caja?          @relation(fields: [cajaId], references: [id])
+  gasto         Gasto?         @relation(fields: [gastoId], references: [id])
+  pagoProveedor PagoProveedor? @relation(fields: [pagoProveedorId], references: [id])
+  conteo        ConteoFondo?   @relation(fields: [conteoId], references: [id])
+
+  @@index([fecha])
+  @@index([cuenta])
+}
+
+/// Conteo semanal del acumulado, como un cierre de caja.
+model ConteoFondo {
+  id                 Int      @id @default(autoincrement())
+  fecha              DateTime @default(now())
+  usuarioId          Int
+  efectivoEsperado   Decimal  @db.Decimal(12, 2)
+  efectivoContado    Decimal  @db.Decimal(12, 2)
+  yapeEsperado       Decimal  @db.Decimal(12, 2)
+  yapeContado        Decimal  @db.Decimal(12, 2)
+  diferenciaEfectivo Decimal  @db.Decimal(12, 2)
+  diferenciaYape     Decimal  @db.Decimal(12, 2)
+  // Billetes y monedas: [{ denominacion, cantidad }].
+  detalle            Json
+  observacion        String?
+
+  usuario     Usuario           @relation(fields: [usuarioId], references: [id])
+  movimientos MovimientoFondo[]
+}
+
+model CategoriaGasto {
+  id             Int      @id @default(autoincrement())
+  nombre         String   @unique
+  // Sueldos: pide a qué trabajador se le pagó.
+  pideTrabajador Boolean  @default(false)
+  activo         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  gastos      Gasto[]
+  gastosFijos GastoFijo[]
+}
+
+/// Gasto que se repite cada mes (alquiler, internet...): avisa cuando toca pagarlo.
+model GastoFijo {
+  id          Int      @id @default(autoincrement())
+  nombre      String
+  categoriaId Int
+  // Día del mes en que se paga (1 a 31; en meses cortos, el último día).
+  diaPago     Int
+  // Monto de referencia; se puede cambiar al pagar (la luz varía).
+  monto       Decimal? @db.Decimal(12, 2)
+  trabajador  String?
+  activo      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  categoria CategoriaGasto @relation(fields: [categoriaId], references: [id])
+  gastos    Gasto[]
+}
+
+enum OrigenGasto {
+  // Del acumulado de cajas anteriores (lo normal).
+  ACUMULADO
+  // De la caja del día (cuando falta en el acumulado o es urgente).
+  CAJA
+}
+
+enum EstadoGasto {
+  REGISTRADO
+  ANULADO
+}
+
+model Gasto {
+  id               Int         @id @default(autoincrement())
+  fecha            DateTime    @default(now())
+  categoriaId      Int
+  concepto         String
+  monto            Decimal     @db.Decimal(12, 2)
+  origen           OrigenGasto
+  medioPago        MedioPago   @default(EFECTIVO)
+  numeroOperacion  String?
+  // Para sueldos y adelantos.
+  trabajador       String?
+  // Nota libre: boleta o recibo, número, a quién se pagó...
+  nota             String?
+  gastoFijoId      Int?
+  // Mes que paga un gasto fijo: "2026-11".
+  periodo          String?
+  usuarioId        Int
+  movimientoCajaId Int?        @unique
+  estado           EstadoGasto @default(REGISTRADO)
+  anuladoPorId     Int?
+  fechaAnulacion   DateTime?
+  motivoAnulacion  String?
+
+  categoria      CategoriaGasto    @relation(fields: [categoriaId], references: [id])
+  gastoFijo      GastoFijo?        @relation(fields: [gastoFijoId], references: [id])
+  usuario        Usuario           @relation("GastoUsuario", fields: [usuarioId], references: [id])
+  anuladoPor     Usuario?          @relation("GastoAnulador", fields: [anuladoPorId], references: [id])
+  movimientoCaja MovimientoCaja?   @relation(fields: [movimientoCajaId], references: [id])
+  movimientos    MovimientoFondo[]
+
+  @@index([fecha])
+  @@index([gastoFijoId, periodo])
 }

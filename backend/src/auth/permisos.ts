@@ -25,11 +25,18 @@ export const PERMISOS = {
   'productos.importar': { grupo: 'Almacén', nombre: 'Importar productos desde Excel' },
   'stock.ajustar': { grupo: 'Almacén', nombre: 'Registrar mermas y ajustes de stock' },
   'inventario.realizar': { grupo: 'Almacén', nombre: 'Realizar inventario (contar, validar y cerrar)' },
+  // Gastos y acumulado
+  'gastos.registrar': { grupo: 'Gastos', nombre: 'Registrar gastos y ver el acumulado' },
+  'acumulado.contar': { grupo: 'Gastos', nombre: 'Conteo semanal del acumulado' },
+  'acumulado.retirar': { grupo: 'Gastos', nombre: 'Retiros, depósitos y traspasos del acumulado' },
+  'gastos.anular': { grupo: 'Gastos', nombre: 'Anular y corregir gastos' },
+  'gastos.configurar': { grupo: 'Gastos', nombre: 'Categorías y gastos fijos' },
   // Reportes
   'reportes.ventas': { grupo: 'Reportes', nombre: 'Reporte de venta' },
   'reportes.compras': { grupo: 'Reportes', nombre: 'Reporte de compra' },
   'reportes.kardex': { grupo: 'Reportes', nombre: 'Reporte de kardex' },
   'reportes.sunat': { grupo: 'Reportes', nombre: 'Boletas SUNAT' },
+  'reportes.gastos': { grupo: 'Reportes', nombre: 'Reporte de gastos y acumulado' },
   // Configuración
   'config.preferencias': { grupo: 'Configuración', nombre: 'Preferencias y datos de la tienda' },
   // Solo el administrador; no se puede dar a otros.
@@ -49,7 +56,7 @@ export const PERMISOS_ASIGNABLES = TODOS_LOS_PERMISOS.filter((p) => !('soloAdmin
 
 /**
  * Lo que hacía el cajero antes de los roles; es el punto de partida del rol
- * Cajero (debe coincidir con la migración roles_permisos). Descuento, editar y
+ * Cajero (debe coincidir con las migraciones roles_permisos y gastos_acumulado). Descuento, editar y
  * anular siguen pidiendo la clave de un administrador.
  */
 export const PERMISOS_CAJERO: ClavePermiso[] = [
@@ -61,6 +68,8 @@ export const PERMISOS_CAJERO: ClavePermiso[] = [
   'ventas.anular',
   'clientes.editar',
   'compras.ver',
+  'gastos.registrar',
+  'acumulado.contar',
 ];
 
 export function esPermiso(clave: string): clave is ClavePermiso {

@@ -111,7 +111,9 @@ export function imprimirCierre(c: Caja, cfg: Configuracion) {
       ${fila('Ventas en efectivo', n(r.porMedio.EFECTIVO).toFixed(2))}
       ${r.sinComprobante ? fila('Ventas sin comprob.', n(r.sinComprobante.porMedio.EFECTIVO).toFixed(2)) : ''}
       ${fila('Otros ingresos', r.ingresos.toFixed(2))}
-      ${fila('Gastos y retiros', `-${n(r.gastos ?? r.egresos).toFixed(2)}`)}
+      ${r.retiros == null
+        ? fila('Gastos y retiros', `-${n(r.gastos ?? r.egresos).toFixed(2)}`)
+        : fila('Gastos', `-${n(r.gastos).toFixed(2)}`) + fila('Retiros', `-${n(r.retiros).toFixed(2)}`)}
       ${r.pagosProveedor != null ? fila('Pagos a proveedores', `-${r.pagosProveedor.toFixed(2)}`) : ''}
       ${fila('<b>Total efectivo en caja</b>', `<b>${r.efectivoEsperado.toFixed(2)}</b>`)}
       ${fila('<b>Efectivo contado</b>', `<b>${n(r.efectivoContado).toFixed(2)}</b>`)}
@@ -126,6 +128,7 @@ export function imprimirCierre(c: Caja, cfg: Configuracion) {
     </table><hr><table>
       ${(r.conteo ?? []).filter((x) => x.cantidad > 0).map((x) => fila(`${x.cantidad} x S/ ${x.denominacion.toFixed(2)}`, (x.cantidad * x.denominacion).toFixed(2))).join('')}
     </table>
+    ${r.alAcumulado ? `<hr><div class="b">PASA AL ACUMULADO</div><table>${fila('Efectivo', r.alAcumulado.efectivo.toFixed(2))}${fila('Yape', r.alAcumulado.yape.toFixed(2))}${fila('Queda en caja', r.alAcumulado.quedaEnCaja.toFixed(2))}</table>` : ''}
     ${c.observacion ? `<hr><div>Obs: ${esc(c.observacion)}</div>` : ''}
     <br><br><div class="c">______________________</div><div class="c">Firma</div>`);
 }

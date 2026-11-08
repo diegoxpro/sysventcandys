@@ -4,10 +4,12 @@ import { useAuth } from './auth';
 import Layout from './components/Layout';
 import Compras from './pages/Compras';
 import CompraDetalle from './pages/CompraDetalle';
+import Acumulado from './pages/Acumulado';
 import Caja from './pages/Caja';
 import Clientes from './pages/Clientes';
 import Configuracion from './pages/Configuracion';
 import CuentasPorPagar from './pages/CuentasPorPagar';
+import Gastos from './pages/Gastos';
 import Inicio from './pages/Inicio';
 import Inventario from './pages/Inventario';
 import Login from './pages/Login';
@@ -43,7 +45,7 @@ export default function App() {
         <Route path="caja" element={<Caja />} />
         {puede('ventas.ver') && <Route path="ventas" element={<Ventas />} />}
         <Route path="clientes" element={<Clientes />} />
-        {(['ventas', 'compras', 'kardex', 'sunat'] as const).map(
+        {(['ventas', 'compras', 'kardex', 'sunat', 'gastos'] as const).map(
           (c) => puede(`reportes.${c}`) && <Route key={c} path={`reportes/${c}`} element={<Reportes key={c} categoria={c} />} />,
         )}
         <Route path="productos" element={<Productos />} />
@@ -54,6 +56,8 @@ export default function App() {
         {puede('compras.ver') && <Route path="compras/:id" element={<CompraDetalle />} />}
         {puede('compras.ver') && <Route path="cuentas-por-pagar" element={<CuentasPorPagar />} />}
         <Route path="proveedores" element={<Proveedores />} />
+        {(puede('gastos.registrar') || puede('gastos.configurar')) && <Route path="gastos" element={<Gastos />} />}
+        {(puede('gastos.registrar') || puede('acumulado.contar') || puede('acumulado.retirar')) && <Route path="acumulado" element={<Acumulado />} />}
         <Route path="configuracion" element={<Configuracion />} />
         <Route path="login" element={<Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />

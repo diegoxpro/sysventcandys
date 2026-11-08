@@ -100,12 +100,13 @@ export default function CompraDetalle() {
         <div className="card-head"><h2>Pagos</h2></div>
         {c.pagos?.length ? (
           <table>
-            <thead><tr><th>Fecha</th><th>Medio</th><th>Operación</th><th>Registró</th><th className="num">Monto</th></tr></thead>
+            <thead><tr><th>Fecha</th><th>Medio</th><th>Salió de</th><th>Operación</th><th>Registró</th><th className="num">Monto</th></tr></thead>
             <tbody>
               {c.pagos.map((p) => (
                 <tr key={p.id}>
                   <td>{fechaHora(p.fecha)}</td>
                   <td>{MEDIO_LABEL[p.medioPago]}</td>
+                  <td>{p.movimientoCaja ? 'Caja del día' : p.movimientoFondo ? `Acumulado (${p.movimientoFondo.cuenta === 'YAPE' ? 'Yape' : 'efectivo'})` : <span className="muted">—</span>}</td>
                   <td className="mono">{p.numeroOperacion ?? '—'}</td>
                   <td>{p.usuario.nombre}</td>
                   <td className="num">{money(p.monto)}</td>
