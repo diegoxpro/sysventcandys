@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { EstadoCaja, EstadoVenta, MedioPago, Prisma, TipoMovimientoCaja } from '@prisma/client';
 import { BackupService } from '../backup/backup.service';
 import { ConfiguracionService } from '../configuracion/configuracion.service';
+import { FondoService } from '../fondo/fondo.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 /** Billetes y monedas en soles para el contador del cierre, de menor a mayor. */
@@ -18,6 +19,7 @@ export class CajaService {
     private readonly prisma: PrismaService,
     private readonly config: ConfiguracionService,
     private readonly backup: BackupService,
+    private readonly fondo: FondoService,
   ) {}
 
   /** La caja abierta (solo hay una caja en la tienda) o null. */
@@ -51,11 +53,14 @@ export class CajaService {
     if (tipo === TipoMovimientoCaja.VENTA_SIN_COMPROBANTE) {
       medioPago ??= MedioPago.EFECTIVO;
       concepto ||= 'Venta sin comprobante';
+    } else if (tipo === TipoMovimientoCaja.EGRESO) {
+      // Los gastos se registran con su categoría (Gastos › Registrar gasto, origen caja del día).
+      throw new BadRequestException('Registra el gasto con su categoría desde «Gasto»');
     } else {
       medioPago = undefined;
       if (concepto.length < 3) throw new BadRequestException('Escribe el concepto (mínimo 3 letras)');
     }
-    if (tipo === TipoMovimientoCaja.EGRESO) {
+    if (tipo === TipoMovimientoCaja.RETIRO) {
       const { efectivoEsperado } = await this.resumen(c.id);
       if (monto > efectivoEsperado) {
         throw new BadRequestException(`No hay suficiente efectivo en caja (S/ ${efectivoEsperado.toFixed(2)})`);
@@ -89,17 +94,19 @@ export class CajaService {
     pagos.forEach((p) => (porMedio[p.medioPago] = r2(Number(p._sum.monto ?? 0))));
     let ingresos = 0;
     let gastos = 0;
+    let retiros = 0;
     let pagosProveedor = 0;
     const sinComprobante = ceros();
     for (const m of movs) {
       const monto = Number(m.monto);
       if (m.tipo === TipoMovimientoCaja.INGRESO) ingresos += monto;
       else if (m.tipo === TipoMovimientoCaja.VENTA_SIN_COMPROBANTE) sinComprobante[m.medioPago ?? MedioPago.EFECTIVO] += monto;
+      else if (m.tipo === TipoMovimientoCaja.RETIRO) retiros += monto;
       else if (m.pagoProveedorId) pagosProveedor += monto;
       else gastos += monto;
     }
     Object.values(MedioPago).forEach((m) => (sinComprobante[m] = r2(sinComprobante[m])));
-    const egresos = gastos + pagosProveedor;
+    const egresos = gastos + retiros + pagosProveedor;
     const totalSinComprobante = r2(Object.values(sinComprobante).reduce((s, v) => s + v, 0));
     // Lo que entró por cada medio: ventas del sistema más ventas sin comprobante.
     const totalPorMedio = ceros();
@@ -124,6 +131,7 @@ export class CajaService {
       totalPorMedio,
       ingresos: r2(ingresos),
       gastos: r2(gastos),
+      retiros: r2(retiros),
       pagosProveedor: r2(pagosProveedor),
       egresos: r2(egresos),
       // Total de efectivo que debe haber en caja.
@@ -189,6 +197,15 @@ export class CajaService {
         ...d,
         diferencia: d.confirmado == null ? null : r2(d.confirmado - d.sistema),
       }));
+      // Pasa al acumulado todo menos el fondo para el día siguiente; lo digital, completo
+      // (lo que confirmó la app o el voucher, o lo del sistema si no se confirmó).
+      const cfg = await this.config.obtener();
+      const quedaEnCaja = r2(Math.min(contado, Number(cfg.montoInicialCaja)));
+      const alAcumulado = {
+        efectivo: r2(contado - quedaEnCaja),
+        yape: r2(confirmado.reduce((s, d) => s + (d.confirmado ?? d.sistema), 0)),
+        quedaEnCaja,
+      };
 
       await tx.caja.update({
         where: { id: c.id },
@@ -209,9 +226,11 @@ export class CajaService {
             diferencia,
             sinCuadrar,
             pendientes: errores,
+            alAcumulado,
           } as Prisma.InputJsonValue,
         },
       });
+      await this.fondo.desdeCierre(tx, c.id, usuarioId, alAcumulado.efectivo, alAcumulado.yape);
       return c.id;
     }).then((id) => {
       // Backup al cerrar caja, sin hacer esperar al cajero.

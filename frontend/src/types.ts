@@ -6,7 +6,8 @@ export type ClavePermiso =
   | 'clientes.editar' | 'clientes.eliminar'
   | 'compras.ver' | 'compras.registrar' | 'compras.pagar' | 'proveedores.editar'
   | 'productos.editar' | 'productos.importar' | 'stock.ajustar' | 'inventario.realizar'
-  | 'reportes.ventas' | 'reportes.compras' | 'reportes.kardex' | 'reportes.sunat'
+  | 'gastos.registrar' | 'acumulado.contar' | 'acumulado.retirar' | 'gastos.anular' | 'gastos.configurar'
+  | 'reportes.ventas' | 'reportes.compras' | 'reportes.kardex' | 'reportes.sunat' | 'reportes.gastos'
   | 'config.preferencias' | 'config.usuarios' | 'config.series' | 'config.sunat' | 'config.backup' | 'config.red';
 
 export interface PermisoEfectivo {
@@ -150,7 +151,16 @@ export interface Compra {
     producto: Pick<Producto, 'id' | 'nombre' | 'codigoBarra' | 'unidad'>;
     presentacion: Pick<Presentacion, 'id' | 'nombre' | 'factor'> | null;
   }[];
-  pagos?: { id: number; fecha: string; monto: Dec; medioPago: MedioPago; numeroOperacion: string | null; usuario: { nombre: string } }[];
+  pagos?: {
+    id: number;
+    fecha: string;
+    monto: Dec;
+    medioPago: MedioPago;
+    numeroOperacion: string | null;
+    usuario: { nombre: string };
+    movimientoCaja?: { id: number } | null;
+    movimientoFondo?: { cuenta: CuentaFondo } | null;
+  }[];
 }
 
 export interface Sugerencia {
@@ -337,6 +347,7 @@ export interface ResumenCaja {
   totalPorMedio?: Record<MedioPago, number>;
   ingresos: number;
   gastos?: number;
+  retiros?: number;
   pagosProveedor?: number;
   egresos: number;
   /** Total de efectivo que debe haber en caja. */
@@ -347,9 +358,11 @@ export interface ResumenCaja {
   pendientes?: string[];
   efectivoContado?: number;
   diferencia?: number;
+  /** Lo que pasó al acumulado al cerrar (cierres desde que existe el acumulado). */
+  alAcumulado?: { efectivo: number; yape: number; quedaEnCaja: number };
 }
 
-export type TipoMovimientoCaja = 'INGRESO' | 'EGRESO' | 'VENTA_SIN_COMPROBANTE';
+export type TipoMovimientoCaja = 'INGRESO' | 'EGRESO' | 'VENTA_SIN_COMPROBANTE' | 'RETIRO';
 
 export interface Caja {
   id: number;
@@ -374,4 +387,116 @@ export interface Caja {
     usuario: { nombre: string };
   }[];
   resumen?: ResumenCaja;
+}
+
+// ---------------------------------------------------------------- Gastos y acumulado
+
+export type CuentaFondo = 'EFECTIVO' | 'YAPE';
+export const CUENTA_LABEL: Record<CuentaFondo, string> = { EFECTIVO: 'Efectivo', YAPE: 'Yape' };
+export type OrigenGasto = 'ACUMULADO' | 'CAJA';
+export const ORIGEN_LABEL: Record<OrigenGasto, string> = { ACUMULADO: 'Acumulado', CAJA: 'Caja del día' };
+
+export type TipoMovimientoFondo = 'CIERRE_CAJA' | 'GASTO' | 'PAGO_PROVEEDOR' | 'RETIRO' | 'TRASPASO' | 'AJUSTE_CONTEO' | 'ANULACION';
+export const TIPO_FONDO_LABEL: Record<TipoMovimientoFondo, string> = {
+  CIERRE_CAJA: 'Cierre de caja',
+  GASTO: 'Gasto',
+  PAGO_PROVEEDOR: 'Pago a proveedor',
+  RETIRO: 'Retiro o depósito',
+  TRASPASO: 'Traspaso',
+  AJUSTE_CONTEO: 'Ajuste de conteo',
+  ANULACION: 'Anulación',
+};
+
+export interface SaldosFondo {
+  EFECTIVO: number;
+  YAPE: number;
+  total: number;
+}
+
+export interface MovimientoFondo {
+  id: number;
+  fecha: string;
+  tipo: TipoMovimientoFondo;
+  cuenta: CuentaFondo;
+  monto: Dec;
+  concepto: string;
+  usuario: { nombre: string };
+}
+
+export interface ConteoFondo {
+  id: number;
+  fecha: string;
+  efectivoEsperado: Dec;
+  efectivoContado: Dec;
+  yapeEsperado: Dec;
+  yapeContado: Dec;
+  diferenciaEfectivo: Dec;
+  diferenciaYape: Dec;
+  detalle: { denominacion: number; cantidad: number }[];
+  observacion: string | null;
+  usuario: { nombre: string };
+}
+
+export interface ResumenFondo {
+  saldos: SaldosFondo;
+  ultimoConteo: ConteoFondo | null;
+  movimientos: MovimientoFondo[];
+}
+
+export interface CategoriaGasto {
+  id: number;
+  nombre: string;
+  pideTrabajador: boolean;
+  activo: boolean;
+  _count?: { gastos: number; gastosFijos: number };
+}
+
+export type EstadoGastoFijo = 'PAGADO' | 'VENCIDO' | 'HOY' | 'PROXIMO' | 'PENDIENTE';
+
+export interface MesGastoFijo {
+  periodo: string;
+  fecha: string;
+  estado: EstadoGastoFijo;
+  dias: number;
+}
+
+export interface GastoFijo {
+  id: number;
+  nombre: string;
+  categoriaId: number;
+  categoria: { id: number; nombre: string; pideTrabajador: boolean };
+  diaPago: number;
+  monto: Dec | null;
+  trabajador: string | null;
+  activo: boolean;
+  meses: MesGastoFijo[];
+}
+
+export interface AvisoGastoFijo extends MesGastoFijo {
+  gastoFijoId: number;
+  nombre: string;
+  categoria: { id: number; nombre: string; pideTrabajador: boolean };
+  monto: Dec | null;
+  trabajador: string | null;
+}
+
+export interface Gasto {
+  id: number;
+  fecha: string;
+  categoriaId: number;
+  categoria: { id: number; nombre: string; pideTrabajador: boolean };
+  concepto: string;
+  monto: Dec;
+  origen: OrigenGasto;
+  medioPago: MedioPago;
+  numeroOperacion: string | null;
+  trabajador: string | null;
+  nota: string | null;
+  gastoFijo: { id: number; nombre: string } | null;
+  periodo: string | null;
+  estado: 'REGISTRADO' | 'ANULADO';
+  usuario: { nombre: string };
+  anuladoPor: { nombre: string } | null;
+  fechaAnulacion: string | null;
+  motivoAnulacion: string | null;
 }

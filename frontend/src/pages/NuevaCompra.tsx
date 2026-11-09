@@ -4,12 +4,13 @@ import { api } from '../api';
 import { BORRADOR_COMPRA, borrarBorrador, guardarBorrador, leerBorrador } from '../borrador';
 import BuscadorProducto from '../components/BuscadorProducto';
 import BuscadorProveedor from '../components/BuscadorProveedor';
+import OrigenPago from '../components/OrigenPago';
 import ProductoForm from '../components/ProductoForm';
 import ProveedorForm from '../components/ProveedorForm';
 import SugerenciasModal from '../components/SugerenciasModal';
 import { Campo, Kbd, useAtajos, useCarga, useToast, Vacio } from '../components/ui';
 import { hoyISO, money, n, qty } from '../format';
-import { Compra, DOC_LABEL, MEDIO_LABEL, MEDIOS, MedioPago, Presentacion, Producto, Proveedor, Sugerencia, TipoDoc } from '../types';
+import { Compra, DOC_LABEL, MEDIO_LABEL, MEDIOS, MedioPago, OrigenGasto, Presentacion, Producto, Proveedor, Sugerencia, TipoDoc } from '../types';
 
 interface Linea {
   producto: Producto;
@@ -47,6 +48,8 @@ function cabeceraVacia() {
     condicion: 'CONTADO' as 'CONTADO' | 'CREDITO',
     fechaVencimiento: enDias(15),
     medioPago: 'EFECTIVO' as MedioPago,
+    // De dónde sale el pago al contado: acumulado (lo normal) o caja del día.
+    origenPago: 'ACUMULADO' as OrigenGasto,
     observacion: '',
   };
 }
@@ -141,6 +144,7 @@ export default function NuevaCompra() {
           condicion: cab.condicion,
           fechaVencimiento: cab.condicion === 'CREDITO' ? cab.fechaVencimiento : undefined,
           medioPago: cab.condicion === 'CONTADO' ? cab.medioPago : undefined,
+          origenPago: cab.condicion === 'CONTADO' ? (cab.origenPago ?? 'ACUMULADO') : undefined,
           observacion: cab.observacion.trim() || undefined,
           items: lineas.map((l) => ({
             productoId: l.producto.id,
@@ -224,6 +228,14 @@ export default function NuevaCompra() {
             </Campo>
           )}
           <Campo label="Observación"><input value={cab.observacion} onChange={(e) => setC('observacion', e.target.value)} /></Campo>
+          {cab.condicion === 'CONTADO' && (
+            <div className="span-4 stack" style={{ gap: 6 }}>
+              <b className="small">¿De dónde sale el pago?</b>
+              <div style={{ maxWidth: 640 }}>
+                <OrigenPago origen={cab.origenPago ?? 'ACUMULADO'} onChange={(o) => setC('origenPago', o)} medio={cab.medioPago} monto={total} />
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

@@ -20,7 +20,7 @@ function Enlace({ to, icono, children, end }: { to: string; icono: NombreIcono; 
 
 /** Secciones del menú que el usuario dejó abiertas o cerradas (solo en esta PC). */
 const CLAVE_MENU = 'candys.menu';
-const ABIERTAS_INICIO: Record<string, boolean> = { ventas: true, compras: true, almacen: true, reportes: false };
+const ABIERTAS_INICIO: Record<string, boolean> = { ventas: true, compras: true, gastos: true, almacen: true, reportes: false };
 function leerMenu(): Record<string, boolean> {
   try {
     return { ...ABIERTAS_INICIO, ...JSON.parse(localStorage.getItem(CLAVE_MENU) ?? '{}') };
@@ -69,7 +69,9 @@ export default function Layout() {
   const rolNombre = usuario?.rol === 'ADMIN' ? 'Administrador' : (usuario?.perfil?.nombre ?? 'Personal');
   // Permisos dados solo por un tiempo: se avisa hasta cuándo valen.
   const temporales = (usuario?.permisos ?? []).filter((p) => p.origen === 'USUARIO' && p.hasta);
-  const hayReportes = (['reportes.ventas', 'reportes.compras', 'reportes.kardex', 'reportes.sunat'] as const).some(puede);
+  const hayReportes = (['reportes.ventas', 'reportes.compras', 'reportes.kardex', 'reportes.sunat', 'reportes.gastos'] as const).some(puede);
+  const veGastos = puede('gastos.registrar') || puede('gastos.configurar');
+  const veAcumulado = puede('gastos.registrar') || puede('acumulado.contar') || puede('acumulado.retirar');
   const { data: alertas } = useCarga(() => api<Alertas>('/inventario/alertas'), []);
   const { marca } = useMarca();
   const logo = urlImagen('LOGO', marca);
@@ -120,6 +122,12 @@ export default function Layout() {
             {puede('compras.ver') && <Enlace to="/cuentas-por-pagar" icono="pagar">Cuentas por pagar</Enlace>}
             <Enlace to="/proveedores" icono="proveedores">Proveedores</Enlace>
           </Seccion>
+          {(veGastos || veAcumulado) && (
+            <Seccion id="gastos" titulo="Gastos" icono="gasto" rutas={['/gastos', '/acumulado']} {...sec}>
+              {veGastos && <Enlace to="/gastos" icono="gasto">Gastos</Enlace>}
+              {veAcumulado && <Enlace to="/acumulado" icono="acumulado">Acumulado</Enlace>}
+            </Seccion>
+          )}
           <Seccion id="almacen" titulo="Almacén" icono="inventario" rutas={['/productos', '/inventario']} {...sec}>
             <Enlace to="/productos" icono="productos">Productos</Enlace>
             <Enlace to="/inventario" icono="inventario" end>Inventario y mermas</Enlace>
@@ -130,6 +138,7 @@ export default function Layout() {
               {puede('reportes.ventas') && <Enlace to="/reportes/ventas" icono="venta">Reporte de venta</Enlace>}
               {puede('reportes.compras') && <Enlace to="/reportes/compras" icono="compras">Reporte de compra</Enlace>}
               {puede('reportes.kardex') && <Enlace to="/reportes/kardex" icono="kardex">Reporte de kardex</Enlace>}
+              {puede('reportes.gastos') && <Enlace to="/reportes/gastos" icono="gasto">Reporte de gastos</Enlace>}
               {puede('reportes.sunat') && <Enlace to="/reportes/sunat" icono="lista">Boletas SUNAT</Enlace>}
             </Seccion>
           )}

@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { api } from '../api';
 import { money, n } from '../format';
-import { Compra, MEDIO_LABEL, MEDIOS, MedioPago } from '../types';
+import { Compra, MEDIO_LABEL, MEDIOS, MedioPago, OrigenGasto } from '../types';
+import OrigenPago from './OrigenPago';
 import { Campo, Modal, useToast } from './ui';
 
 export default function PagoModal({ compra, onClose, onListo }: { compra: Compra; onClose: () => void; onListo: () => void }) {
@@ -10,14 +11,14 @@ export default function PagoModal({ compra, onClose, onListo }: { compra: Compra
   const [medioPago, setMedio] = useState<MedioPago>('EFECTIVO');
   const [numeroOperacion, setOperacion] = useState('');
   const [observacion, setObs] = useState('');
-  const [desdeCaja, setDesdeCaja] = useState(false);
+  const [origen, setOrigen] = useState<OrigenGasto>('ACUMULADO');
   const [enviando, setEnviando] = useState(false);
 
   const guardar = async () => {
     setEnviando(true);
     try {
       await api(`/compras/${compra.id}/pagos`, {
-        body: { monto: n(monto), medioPago, desdeCaja: medioPago === 'EFECTIVO' && desdeCaja, numeroOperacion: numeroOperacion.trim() || undefined, observacion: observacion.trim() || undefined },
+        body: { monto: n(monto), medioPago, origen: medioPago === 'EFECTIVO' ? origen : 'ACUMULADO', numeroOperacion: numeroOperacion.trim() || undefined, observacion: observacion.trim() || undefined },
       });
       avisar(`Pago de ${money(monto)} registrado`);
       onListo();
@@ -63,12 +64,10 @@ export default function PagoModal({ compra, onClose, onListo }: { compra: Compra
           <Campo label="Observación" className={medioPago === 'EFECTIVO' ? 'span-2' : ''}>
             <input value={observacion} onChange={(e) => setObs(e.target.value)} />
           </Campo>
-          {medioPago === 'EFECTIVO' && (
-            <label className="check span-2">
-              <input type="checkbox" checked={desdeCaja} onChange={(e) => setDesdeCaja(e.target.checked)} />
-              Sale del efectivo de la caja abierta (se registra como gasto de caja)
-            </label>
-          )}
+          <div className="span-2 stack" style={{ gap: 6 }}>
+            <b className="small">¿De dónde sale el dinero?</b>
+            <OrigenPago origen={origen} onChange={setOrigen} medio={medioPago} monto={n(monto)} />
+          </div>
         </div>
       </div>
     </Modal>

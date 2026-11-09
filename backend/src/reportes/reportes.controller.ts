@@ -7,7 +7,7 @@ import { ConfiguracionService } from '../configuracion/configuracion.service';
 import { reporteAExcel } from './reporte';
 import { defReporte, NombreReporte, REPORTES, ReportesService } from './reportes.service';
 
-@Permiso('reportes.ventas', 'reportes.compras', 'reportes.kardex', 'reportes.sunat')
+@Permiso('reportes.ventas', 'reportes.compras', 'reportes.kardex', 'reportes.sunat', 'reportes.gastos')
 @Controller('reportes')
 export class ReportesController {
   constructor(

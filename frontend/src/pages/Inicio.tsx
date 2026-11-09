@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, qs } from '../api';
 import { useAuth } from '../auth';
+import GastoModal from '../components/GastoModal';
 import MermaModal, { MermaInicial } from '../components/MermaModal';
 import { useCarga, Vacio } from '../components/ui';
 import { diasHasta, fecha, money, n, qty } from '../format';
-import { Alertas, Compra, EstadoBackup, EstadoSunatGeneral, Lote } from '../types';
+import { Alertas, AvisoGastoFijo, Compra, EstadoBackup, EstadoSunatGeneral, Lote } from '../types';
 
 export default function Inicio() {
   const { usuario, puede } = useAuth();
@@ -14,6 +15,8 @@ export default function Inicio() {
   const { data: pendientes } = useCarga(() => api<Compra[]>(`/compras${qs({ pendientes: 1 })}`), []);
   const { data: sunat } = useCarga(() => api<EstadoSunatGeneral>('/sunat/estado'), []);
   const [merma, setMerma] = useState<MermaInicial | null>(null);
+  const { data: fijos, recargar: recargarFijos } = useCarga(() => api<AvisoGastoFijo[]>('/gastos/fijos/avisos'), []);
+  const [pagando, setPagando] = useState<AvisoGastoFijo | null>(null);
 
   const deuda = pendientes?.reduce((s, c) => s + n(c.saldo), 0) ?? 0;
   const vencenPronto = pendientes?.filter((c) => c.fechaVencimiento && diasHasta(c.fechaVencimiento) <= 3) ?? [];
@@ -70,6 +73,25 @@ export default function Inicio() {
         </div>
       )}
 
+      {fijos && fijos.length > 0 && (
+        <div className={`alert ${fijos.some((f) => f.estado !== 'PROXIMO') ? 'danger' : 'warn'}`}>
+          <div className="grow">
+            <b>Gastos fijos por pagar</b>
+            <ul className="aviso-fijos" style={{ margin: '4px 0 0', paddingLeft: 18 }}>
+              {fijos.map((f) => (
+                <li key={`${f.gastoFijoId}-${f.periodo}`}>
+                  {f.nombre}{f.monto != null && ` (${money(f.monto)})`}:{' '}
+                  {f.estado === 'VENCIDO' ? `venció el ${fecha(f.fecha)}` : f.estado === 'HOY' ? 'toca pagar hoy' : `vence el ${fecha(f.fecha)}`}
+                  {puede('gastos.registrar') && (
+                    <> <button className="btn btn-sm" onClick={() => setPagando(f)}>Pagar</button></>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
       {a && a.vencidos.length > 0 && (
         <div className="card" id="vencidos">
           <div className="card-head">
@@ -115,6 +137,7 @@ export default function Inicio() {
         </div>
       </div>
 
+      {pagando && <GastoModal fijo={pagando} onClose={() => setPagando(null)} onListo={() => (setPagando(null), recargarFijos())} />}
       {merma && <MermaModal inicial={merma} onClose={() => setMerma(null)} onListo={() => (setMerma(null), recargar())} />}
     </div>
   );
